@@ -1,6 +1,6 @@
 {
   "name": "vite-magic-tree-shaking",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Auto-generate tree-shakeable lib entries for Vite build.lib.entry",
   "author": "pilmee",
   "license": "MIT",
