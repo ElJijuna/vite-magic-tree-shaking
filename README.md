@@ -1,5 +1,10 @@
 # vite-magic-tree-shaking
 
+[![npm version](https://img.shields.io/npm/v/vite-magic-tree-shaking?color=crimson&label=npm)](https://www.npmjs.com/package/vite-magic-tree-shaking)
+[![npm downloads](https://img.shields.io/npm/dm/vite-magic-tree-shaking?color=orange)](https://www.npmjs.com/package/vite-magic-tree-shaking)
+[![license](https://img.shields.io/npm/l/vite-magic-tree-shaking?color=blue)](https://github.com/ElJijuna/vite-magic-tree-shaking/blob/main/LICENSE)
+[![CI](https://github.com/ElJijuna/vite-magic-tree-shaking/actions/workflows/publish.yml/badge.svg)](https://github.com/ElJijuna/vite-magic-tree-shaking/actions/workflows/publish.yml)
+
 Auto-generate tree-shakeable `build.lib.entry` for Vite from your source directory.
 
 ## Install
