@@ -24,6 +24,9 @@
       "require": "./dist/index.cjs"
     }
   },
+  "bin": {
+    "vite-magic": "./dist/cli.js"
+  },
   "files": [
     "dist"
   ],
