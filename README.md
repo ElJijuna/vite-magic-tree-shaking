@@ -1,5 +1,10 @@
 # vite-magic-tree-shaking
 
+[![npm version](https://img.shields.io/npm/v/vite-magic-tree-shaking?color=crimson&label=npm)](https://www.npmjs.com/package/vite-magic-tree-shaking)
+[![npm downloads](https://img.shields.io/npm/dm/vite-magic-tree-shaking?color=orange)](https://www.npmjs.com/package/vite-magic-tree-shaking)
+[![license](https://img.shields.io/npm/l/vite-magic-tree-shaking?color=blue)](https://github.com/ElJijuna/vite-magic-tree-shaking/blob/main/LICENSE)
+[![CI](https://github.com/ElJijuna/vite-magic-tree-shaking/actions/workflows/publish.yml/badge.svg)](https://github.com/ElJijuna/vite-magic-tree-shaking/actions/workflows/publish.yml)
+
 Auto-generate tree-shakeable `build.lib.entry` for Vite from your source directory.
 
 ## Install
@@ -37,6 +42,92 @@ export default defineConfig({
 })
 ```
 
+### Warn when `package.json` exports are out of sync
+
+Pass `warnOnExportsMismatch: true` to get a `console.warn` at build/dev time if
+the `exports` field in `package.json` does not match the entries resolved from
+your source directory:
+
+```ts
+entry: generateEntries(__dirname, 'src', { warnOnExportsMismatch: true })
+```
+
+```
+[vite-magic-tree-shaking] package.json exports are out of sync with src entries.
+Run: npx vite-magic generate
+```
+
+## CLI
+
+The package ships a `vite-magic` binary with two commands.
+
+### `generate`
+
+Reads your source directory, derives the entry map, and writes the matching
+`exports` field into `package.json`. Run this after adding or removing source
+files.
+
+```bash
+# using npx (no install required)
+npx vite-magic generate
+
+# custom rootDir and srcDir
+npx vite-magic generate /path/to/project lib
+```
+
+Example output:
+
+```
+✓ package.json exports updated:
+  .
+  ./Button/Button
+  ./Users
+  ./Users/domain/user
+  ./Users/types/UserDTO
+```
+
+### `validate`
+
+Checks that the `exports` field in `package.json` matches the entries derived
+from the source directory. Exits with code `1` if they are out of sync — useful
+in CI.
+
+```bash
+npx vite-magic validate
+```
+
+Example output when in sync:
+
+```
+✓ package.json exports are in sync
+```
+
+Example output when out of sync:
+
+```
+✗ package.json exports are out of sync with src entries
+  Missing : ./NewFeature
+  Extra   : ./OldFeature
+  Changed : ./Users
+
+Run: npx vite-magic generate
+```
+
+### Add to `package.json` scripts
+
+```json
+{
+  "scripts": {
+    "sync-exports": "vite-magic generate",
+    "validate-exports": "vite-magic validate",
+    "prebuild": "vite-magic validate"
+  }
+}
+```
+
+With `prebuild` wired up, running `npm run build` will abort with a clear error
+if `package.json` exports are stale, before Vite even starts.
+
 ## How entries are resolved
 
 Given this structure:
@@ -66,6 +157,40 @@ src/
 }
 ```
 
+And `vite-magic generate` writes the corresponding `exports` to `package.json`:
+
+```json
+{
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./Users": {
+      "types": "./dist/Users.d.ts",
+      "import": "./dist/Users.js",
+      "require": "./dist/Users.cjs"
+    },
+    "./Users/domain/user": {
+      "types": "./dist/Users/domain/user.d.ts",
+      "import": "./dist/Users/domain/user.js",
+      "require": "./dist/Users/domain/user.cjs"
+    },
+    "./Users/types/UserDTO": {
+      "types": "./dist/Users/types/UserDTO.d.ts",
+      "import": "./dist/Users/types/UserDTO.js",
+      "require": "./dist/Users/types/UserDTO.cjs"
+    },
+    "./Button/Button": {
+      "types": "./dist/Button/Button.d.ts",
+      "import": "./dist/Button/Button.js",
+      "require": "./dist/Button/Button.cjs"
+    }
+  }
+}
+```
+
 ### Rules
 
 | Source | Entry key |
@@ -91,13 +216,20 @@ The following are never included as entries:
 ## API
 
 ```ts
-generateEntries(rootDir: string, srcDir?: string): Record<string, string>
+generateEntries(rootDir: string, srcDir?: string, options?: GenerateEntriesOptions): Record<string, string>
 ```
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `rootDir` | `string` | — | Absolute path to the project root |
 | `srcDir` | `string` | `'src'` | Source directory name, relative to `rootDir` |
+| `options` | `GenerateEntriesOptions` | `{}` | Optional configuration |
+
+### `GenerateEntriesOptions`
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `warnOnExportsMismatch` | `boolean` | `false` | Emit a `console.warn` if `package.json` exports do not match the resolved entries |
 
 ## License
 

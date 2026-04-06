@@ -1,7 +1,21 @@
 import { resolve, relative, join, extname } from 'node:path'
 import { readdirSync, statSync, existsSync } from 'node:fs'
+import { entryRecordToExports, exportsAreSynced, readPackageJson } from './syncExports.js'
 
 export type EntryRecord = Record<string, string>
+
+export interface GenerateEntriesOptions {
+  /**
+   * When `true`, compares the generated entries against `package.json` exports
+   * and emits a `console.warn` if they are out of sync.
+   *
+   * Useful in `vite.config.ts` to catch forgotten `vite-magic generate` runs
+   * at build/dev time.
+   *
+   * @default false
+   */
+  warnOnExportsMismatch?: boolean
+}
 
 const VALID_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts']
 
@@ -86,13 +100,31 @@ function scanDir(
  * @param rootDir  Absolute path to the project root (pass `__dirname` or
  *                 `fileURLToPath(new URL('.', import.meta.url))`)
  * @param srcDir   Source directory name relative to `rootDir` (default: `'src'`)
+ * @param options  Optional configuration
  */
 export function generateEntries(
   rootDir: string,
-  srcDir: string = 'src'
+  srcDir: string = 'src',
+  options: GenerateEntriesOptions = {}
 ): EntryRecord {
   const absoluteSrc = resolve(rootDir, srcDir)
   const entries: EntryRecord = {}
   scanDir(absoluteSrc, absoluteSrc, entries, true)
+
+  if (options.warnOnExportsMismatch) {
+    try {
+      const pkg = readPackageJson(rootDir)
+      const expected = entryRecordToExports(entries)
+      if (!exportsAreSynced(pkg.exports, expected)) {
+        console.warn(
+          '[vite-magic-tree-shaking] package.json exports are out of sync with src entries.\n' +
+          'Run: npx vite-magic generate'
+        )
+      }
+    } catch {
+      // silently skip if package.json is unreadable
+    }
+  }
+
   return entries
 }
