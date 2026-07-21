@@ -28,8 +28,9 @@ export default defineConfig({
     lib: {
       entry: generateEntries(__dirname),       // scans src/ by default
       // entry: generateEntries(__dirname, 'lib'), // custom source dir
-      formats: ['es'],
-      fileName: (_, entryName) => `${entryName}.js`,
+      formats: ['es', 'cjs'],
+      fileName: (format, entryName) =>
+        `${entryName}.${format === 'es' ? 'js' : 'cjs'}`,
     },
     rollupOptions: {
       external: ['react', 'react-dom'],
@@ -49,12 +50,15 @@ the `exports` field in `package.json` does not match the entries resolved from
 your source directory:
 
 ```ts
-entry: generateEntries(__dirname, 'src', { warnOnExportsMismatch: true })
+entry: generateEntries(__dirname, 'src', {
+  warnOnExportsMismatch: true,
+  exports: { formats: ['es', 'cjs'] },
+})
 ```
 
 ```
 [vite-magic-tree-shaking] package.json exports are out of sync with src entries.
-Run: npx vite-magic generate
+Run: npx vite-magic-tree-shaking generate
 ```
 
 ## CLI
@@ -63,16 +67,22 @@ The package ships a `vite-magic` binary with two commands.
 
 ### `generate`
 
-Reads your source directory, derives the entry map, and writes the matching
-`exports` field into `package.json`. Run this after adding or removing source
-files.
+Reads your source directory, derives the entry map, and safely merges matching
+entries into the `exports` field in `package.json`. Existing custom exports are
+preserved unless `--prune` is passed explicitly.
 
 ```bash
 # using npx (no install required)
-npx vite-magic generate
+npx vite-magic-tree-shaking generate
 
 # custom rootDir and srcDir
-npx vite-magic generate /path/to/project lib
+npx vite-magic-tree-shaking generate /path/to/project lib
+
+# project emits ES modules only
+npx vite-magic-tree-shaking generate --formats es
+
+# preview without modifying package.json
+npx vite-magic-tree-shaking generate --dry-run
 ```
 
 Example output:
@@ -93,7 +103,10 @@ from the source directory. Exits with code `1` if they are out of sync — usefu
 in CI.
 
 ```bash
-npx vite-magic validate
+npx vite-magic-tree-shaking validate
+
+# also reject custom exports not generated from source
+npx vite-magic-tree-shaking validate --strict
 ```
 
 Example output when in sync:
@@ -102,7 +115,7 @@ Example output when in sync:
 ✓ package.json exports are in sync
 ```
 
-Example output when out of sync:
+Example output from strict validation when out of sync:
 
 ```
 ✗ package.json exports are out of sync with src entries
@@ -110,7 +123,7 @@ Example output when out of sync:
   Extra   : ./OldFeature
   Changed : ./Users
 
-Run: npx vite-magic generate
+Run: npx vite-magic-tree-shaking generate
 ```
 
 ### Add to `package.json` scripts
@@ -127,6 +140,18 @@ Run: npx vite-magic generate
 
 With `prebuild` wired up, running `npm run build` will abort with a clear error
 if `package.json` exports are stale, before Vite even starts.
+
+### CLI options
+
+| Option | Purpose |
+|---|---|
+| `--formats es,cjs` | Match the formats emitted by Vite |
+| `--out-dir dist` | Set the JavaScript output directory |
+| `--types-dir dist` | Set the declaration output directory |
+| `--no-types` | Omit TypeScript declaration conditions |
+| `--dry-run` | Preview changes without writing |
+| `--prune` | Explicitly remove exports not generated from source |
+| `--strict` | Make `validate` reject additional custom exports |
 
 ## How entries are resolved
 
@@ -168,7 +193,7 @@ And `vite-magic generate` writes the corresponding `exports` to `package.json`:
       "require": "./dist/index.cjs"
     },
     "./Users": {
-      "types": "./dist/Users.d.ts",
+      "types": "./dist/Users/index.d.ts",
       "import": "./dist/Users.js",
       "require": "./dist/Users.cjs"
     },
@@ -204,6 +229,11 @@ Directories with an `index` file use the **directory name** as key. Their subdir
 
 Directories without an `index` expose **each file individually** using its relative path (without extension).
 
+Symbolic links are ignored by default. Set `followSymlinks: true` to follow links
+whose resolved target remains inside the source directory. Duplicate entry keys
+and multiple `index` files fail with a descriptive error instead of silently
+overwriting an entry.
+
 ### Ignored files
 
 The following are never included as entries:
@@ -230,6 +260,26 @@ generateEntries(rootDir: string, srcDir?: string, options?: GenerateEntriesOptio
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `warnOnExportsMismatch` | `boolean` | `false` | Emit a `console.warn` if `package.json` exports do not match the resolved entries |
+| `followSymlinks` | `boolean` | `false` | Follow links that stay inside `srcDir` |
+| `include` | `(path: string) => boolean` | — | Include matching valid source files |
+| `exclude` | `(path: string) => boolean` | — | Exclude matching files or directories |
+| `onCollision` | `'error' \| 'overwrite'` | `'error'` | Choose how duplicate keys are handled |
+| `exports` | `ExportsOptions` | `{}` | Output contract used by mismatch warnings |
+
+### Export-map API
+
+```ts
+entryRecordToExports(entries, {
+  sourceRoot: '/project/src',
+  formats: ['es'],
+  outDir: 'dist',
+  typesOutDir: 'dist',
+})
+```
+
+The generated conditions only include formats that the build emits. Declaration
+paths retain the source layout, so `src/Users/index.ts` correctly maps to
+`dist/Users/index.d.ts`.
 
 ## License
 

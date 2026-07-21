@@ -34,8 +34,9 @@ export default defineConfig({
   build: {
     lib: {
       entry: generateEntries(__dirname, 'src'), // 'src' is the default
-      formats: ['es'],
-      fileName: (format, entryName) => `${entryName}.js`,
+      formats: ['es', 'cjs'],
+      fileName: (format, entryName) =>
+        `${entryName}.${format === 'es' ? 'js' : 'cjs'}`,
     },
     rollupOptions: {
       external: ['react', 'react-dom'],

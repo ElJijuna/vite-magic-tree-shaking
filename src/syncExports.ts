@@ -43,10 +43,35 @@ export type ExportsComparisonOptions = {
 
 function normaliseRelativeOutputPath(path: string, optionName: string): string {
   const normalised = path.replace(/\\/g, '/').replace(/^\.\//, '')
-  if (!normalised || isAbsolute(path) || normalised === '..' || normalised.startsWith('../')) {
+  if (
+    !normalised ||
+    normalised.includes('\0') ||
+    isAbsolute(path) ||
+    /^[A-Za-z]:\//.test(normalised) ||
+    normalised === '..' ||
+    normalised.startsWith('../')
+  ) {
     throw new Error(`${optionName} must be a non-empty path inside the package`)
   }
   return normalised.replace(/\/$/, '')
+}
+
+function validateEntryKey(key: string): void {
+  const normalised = key.replace(/\\/g, '/')
+  if (
+    !normalised ||
+    normalised.startsWith('/') ||
+    normalised.split('/').some((segment) => segment === '' || segment === '.' || segment === '..')
+  ) {
+    throw new Error(`Invalid entry key: ${key}`)
+  }
+}
+
+function validateExtension(extension: string, optionName: string): string {
+  if (!/^\.[A-Za-z0-9]+$/.test(extension)) {
+    throw new Error(`${optionName} must be a file extension such as .js or .cjs`)
+  }
+  return extension
 }
 
 function packageTarget(...parts: string[]): string {
@@ -92,10 +117,14 @@ export function entryRecordToExports(
   const result = Object.create(null) as ExportsMap
   const outDir = normaliseRelativeOutputPath(options.outDir ?? 'dist', 'outDir')
   const formats = new Set(options.formats ?? ['es', 'cjs'])
-  const importExtension = options.importExtension ?? '.js'
-  const requireExtension = options.requireExtension ?? '.cjs'
+  if ([...formats].some((format) => format !== 'es' && format !== 'cjs')) {
+    throw new Error('formats accepts only es and cjs')
+  }
+  const importExtension = validateExtension(options.importExtension ?? '.js', 'importExtension')
+  const requireExtension = validateExtension(options.requireExtension ?? '.cjs', 'requireExtension')
 
   for (const key of Object.keys(entries).sort()) {
+    validateEntryKey(key)
     const exportKey = key === 'index' ? '.' : `./${key}`
     const conditions: ExportConditions = {}
     if (options.includeTypes !== false) {
@@ -106,6 +135,9 @@ export function entryRecordToExports(
     }
     if (formats.has('cjs')) {
       conditions.require = packageTarget(outDir, `${key}${requireExtension}`)
+    }
+    if (Object.keys(conditions).length === 0) {
+      throw new Error('At least one export condition must be enabled')
     }
     result[exportKey] = conditions
   }

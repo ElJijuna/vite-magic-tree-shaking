@@ -1,5 +1,6 @@
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { realpathSync } from 'node:fs'
 import { generateEntries } from './generateEntries.js'
 import {
   diffExports,
@@ -145,6 +146,9 @@ export function runCli(argv: string[]): number {
     if (args.command !== 'generate' && (args.dryRun || args.prune)) {
       throw new Error('--dry-run and --prune are only valid with generate')
     }
+    if (args.command !== 'validate' && args.strict) {
+      throw new Error('--strict is only valid with validate')
+    }
 
     const entries = generateEntries(args.rootDir, args.srcDir)
     const expected = entryRecordToExports(entries, {
@@ -200,8 +204,13 @@ export function runCli(argv: string[]): number {
   }
 }
 
-const isMainModule = process.argv[1]
-  ? resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])
-  : false
+function isMainModule(): boolean {
+  if (!process.argv[1]) return false
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1])
+  } catch {
+    return false
+  }
+}
 
-if (isMainModule) process.exitCode = runCli(process.argv.slice(2))
+if (isMainModule()) process.exitCode = runCli(process.argv.slice(2))

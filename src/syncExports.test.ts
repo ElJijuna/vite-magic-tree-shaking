@@ -102,6 +102,18 @@ describe('entryRecordToExports', () => {
       entryRecordToExports({ index: 'src/index.ts' }, { outDir: '../outside' })
     ).toThrow('outDir must be a non-empty path inside the package')
   })
+
+  it('rejects unsafe entry keys and extensions', () => {
+    expect(() => entryRecordToExports({ '../escape': 'src/escape.ts' })).toThrow(
+      'Invalid entry key'
+    )
+    expect(() =>
+      entryRecordToExports(
+        { index: 'src/index.ts' },
+        { importExtension: '/../../outside.js' }
+      )
+    ).toThrow('importExtension must be a file extension')
+  })
 })
 
 describe('export comparison and merging', () => {

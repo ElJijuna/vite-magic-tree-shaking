@@ -192,6 +192,8 @@ describe('realistic project tree', () => {
 })
 
 describe('safety and configuration', () => {
+  const symlinkIt = process.platform === 'win32' ? it.skip : it
+
   it('keeps __proto__ as an own entry key', () => {
     root = makeFixture(['src/__proto__.ts'])
 
@@ -237,7 +239,7 @@ describe('safety and configuration', () => {
     })
   })
 
-  it('ignores symbolic links by default', () => {
+  symlinkIt('ignores symbolic links by default', () => {
     root = makeFixture(['src/index.ts', 'outside/secret.ts'])
     symlinkSync(join(root, 'outside'), join(root, 'src/linked'))
 
@@ -246,7 +248,7 @@ describe('safety and configuration', () => {
     })
   })
 
-  it('follows internal symbolic links only when enabled', () => {
+  symlinkIt('follows internal symbolic links only when enabled', () => {
     root = makeFixture(['src/shared/value.ts'])
     symlinkSync(join(root, 'src/shared'), join(root, 'src/linked'))
 
@@ -257,7 +259,7 @@ describe('safety and configuration', () => {
     })
   })
 
-  it('rejects symbolic links that escape the source directory', () => {
+  symlinkIt('rejects symbolic links that escape the source directory', () => {
     root = makeFixture(['src/index.ts', 'outside/secret.ts'])
     symlinkSync(join(root, 'outside'), join(root, 'src/linked'))
 
