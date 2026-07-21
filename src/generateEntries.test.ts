@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { generateEntries } from './generateEntries.js'
@@ -188,5 +188,87 @@ describe('realistic project tree', () => {
       'utils/utils': 'src/utils/utils.ts',
       'utils/helpers': 'src/utils/helpers.ts',
     })
+  })
+})
+
+describe('safety and configuration', () => {
+  it('keeps __proto__ as an own entry key', () => {
+    root = makeFixture(['src/__proto__.ts'])
+
+    const entries = generateEntries(root)
+    expect(Object.keys(entries)).toEqual(['__proto__'])
+    expect(entries.__proto__).toBe(join(root, 'src/__proto__.ts'))
+  })
+
+  it('throws when multiple source files produce the same entry key', () => {
+    root = makeFixture(['src/utils/helper.js', 'src/utils/helper.ts'])
+
+    expect(() => generateEntries(root)).toThrow('Duplicate entry key "utils/helper"')
+  })
+
+  it('throws when a directory contains multiple index files', () => {
+    root = makeFixture(['src/Users/index.js', 'src/Users/index.ts'])
+
+    expect(() => generateEntries(root)).toThrow('Multiple index files')
+  })
+
+  it('supports explicit collision overwrites', () => {
+    root = makeFixture(['src/utils/helper.js', 'src/utils/helper.ts'])
+
+    expect(relativise(generateEntries(root, 'src', { onCollision: 'overwrite' }), root)).toEqual({
+      'utils/helper': 'src/utils/helper.ts',
+    })
+  })
+
+  it('supports include and exclude filters using portable paths', () => {
+    root = makeFixture([
+      'src/public/Button.ts',
+      'src/public/internal.ts',
+      'src/private/secret.ts',
+    ])
+
+    const entries = generateEntries(root, 'src', {
+      include: (path) => !path.endsWith('internal.ts'),
+      exclude: (path) => path === 'private',
+    })
+
+    expect(relativise(entries, root)).toEqual({
+      'public/Button': 'src/public/Button.ts',
+    })
+  })
+
+  it('ignores symbolic links by default', () => {
+    root = makeFixture(['src/index.ts', 'outside/secret.ts'])
+    symlinkSync(join(root, 'outside'), join(root, 'src/linked'))
+
+    expect(relativise(generateEntries(root), root)).toEqual({
+      index: 'src/index.ts',
+    })
+  })
+
+  it('follows internal symbolic links only when enabled', () => {
+    root = makeFixture(['src/shared/value.ts'])
+    symlinkSync(join(root, 'src/shared'), join(root, 'src/linked'))
+
+    expect(
+      relativise(generateEntries(root, 'src', { followSymlinks: true }), root)
+    ).toEqual({
+      'linked/value': 'src/linked/value.ts',
+    })
+  })
+
+  it('rejects symbolic links that escape the source directory', () => {
+    root = makeFixture(['src/index.ts', 'outside/secret.ts'])
+    symlinkSync(join(root, 'outside'), join(root, 'src/linked'))
+
+    expect(() =>
+      generateEntries(root, 'src', { followSymlinks: true })
+    ).toThrow('Symbolic link escapes source directory')
+  })
+
+  it('reports a clear error when the source directory is missing', () => {
+    root = makeFixture(['package.json'])
+
+    expect(() => generateEntries(root)).toThrow('Source directory does not exist or is unreadable')
   })
 })
