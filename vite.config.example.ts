@@ -24,19 +24,18 @@
  *   }
  */
 
-import { defineConfig } from 'vite'
-import { fileURLToPath } from 'node:url'
-import { generateEntries } from 'vite-magic-tree-shaking'
+import { fileURLToPath } from 'node:url';
+import { defineConfig } from 'vite';
+import { generateEntries } from 'vite-magic-tree-shaking';
 
-const __dirname = fileURLToPath(new URL('.', import.meta.url))
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
   build: {
     lib: {
       entry: generateEntries(__dirname, 'src'), // 'src' is the default
       formats: ['es', 'cjs'],
-      fileName: (format, entryName) =>
-        `${entryName}.${format === 'es' ? 'js' : 'cjs'}`,
+      fileName: (format, entryName) => `${entryName}.${format === 'es' ? 'js' : 'cjs'}`,
     },
     rollupOptions: {
       external: ['react', 'react-dom'],
@@ -46,4 +45,4 @@ export default defineConfig({
       },
     },
   },
-})
+});

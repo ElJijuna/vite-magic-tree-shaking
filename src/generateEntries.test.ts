@@ -1,38 +1,42 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs'
-import { join } from 'node:path'
-import { tmpdir } from 'node:os'
-import { generateEntries } from './generateEntries.js'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { generateEntries } from './generateEntries.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 function touch(filePath: string): void {
-  mkdirSync(join(filePath, '..'), { recursive: true })
-  writeFileSync(filePath, '')
+  mkdirSync(join(filePath, '..'), { recursive: true });
+  writeFileSync(filePath, '');
 }
 
 function makeFixture(files: string[]): string {
-  const root = mkdtempSync(join(tmpdir(), 'vite-entries-'))
-  for (const f of files) touch(join(root, f))
-  return root
+  const root = mkdtempSync(join(tmpdir(), 'vite-entries-'));
+
+  for (const f of files) {
+    touch(join(root, f));
+  }
+
+  return root;
 }
 
 // Normalise absolute paths → relative to root so snapshots are stable
 function relativise(entries: Record<string, string>, root: string) {
   return Object.fromEntries(
-    Object.entries(entries).map(([k, v]) => [k, v.replace(root + '/', '')])
-  )
+    Object.entries(entries).map(([k, v]) => [k, v.replace(`${root}/`, '')]),
+  );
 }
 
 // ---------------------------------------------------------------------------
 
-let root: string
+let root: string;
 
 afterEach(() => {
-  rmSync(root, { recursive: true, force: true })
-})
+  rmSync(root, { recursive: true, force: true });
+});
 
 // ---------------------------------------------------------------------------
 // Root-level files
@@ -40,26 +44,26 @@ afterEach(() => {
 
 describe('root src/index', () => {
   it('picks up src/index.ts', () => {
-    root = makeFixture(['src/index.ts'])
+    root = makeFixture(['src/index.ts']);
     expect(relativise(generateEntries(root), root)).toEqual({
       index: 'src/index.ts',
-    })
-  })
+    });
+  });
 
   it('picks up src/index.tsx', () => {
-    root = makeFixture(['src/index.tsx'])
+    root = makeFixture(['src/index.tsx']);
     expect(relativise(generateEntries(root), root)).toEqual({
       index: 'src/index.tsx',
-    })
-  })
+    });
+  });
 
   it('uses custom srcDir', () => {
-    root = makeFixture(['lib/index.ts'])
+    root = makeFixture(['lib/index.ts']);
     expect(relativise(generateEntries(root, 'lib'), root)).toEqual({
       index: 'lib/index.ts',
-    })
-  })
-})
+    });
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Directory with index
@@ -67,26 +71,26 @@ describe('root src/index', () => {
 
 describe('directory with index', () => {
   beforeEach(() => {
-    root = makeFixture(['src/Users/index.ts'])
-  })
+    root = makeFixture(['src/Users/index.ts']);
+  });
 
   it('uses the directory name as key', () => {
     expect(relativise(generateEntries(root), root)).toEqual({
       Users: 'src/Users/index.ts',
-    })
-  })
+    });
+  });
 
   it('still scans subdirectories inside an indexed dir', () => {
-    touch(join(root, 'src/Users/domain/user.ts'))
-    touch(join(root, 'src/Users/types/UserDTO.ts'))
+    touch(join(root, 'src/Users/domain/user.ts'));
+    touch(join(root, 'src/Users/types/UserDTO.ts'));
 
     expect(relativise(generateEntries(root), root)).toEqual({
       Users: 'src/Users/index.ts',
       'Users/domain/user': 'src/Users/domain/user.ts',
       'Users/types/UserDTO': 'src/Users/types/UserDTO.ts',
-    })
-  })
-})
+    });
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Directory without index
@@ -94,23 +98,20 @@ describe('directory with index', () => {
 
 describe('directory without index', () => {
   it('uses dir/file as key for a named file', () => {
-    root = makeFixture(['src/Users/Users.tsx'])
+    root = makeFixture(['src/Users/Users.tsx']);
     expect(relativise(generateEntries(root), root)).toEqual({
       'Users/Users': 'src/Users/Users.tsx',
-    })
-  })
+    });
+  });
 
   it('registers every valid file when there is no index', () => {
-    root = makeFixture([
-      'src/utils/utils.ts',
-      'src/utils/helper.ts',
-    ])
+    root = makeFixture(['src/utils/utils.ts', 'src/utils/helper.ts']);
     expect(relativise(generateEntries(root), root)).toEqual({
       'utils/utils': 'src/utils/utils.ts',
       'utils/helper': 'src/utils/helper.ts',
-    })
-  })
-})
+    });
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Ignored files
@@ -118,48 +119,48 @@ describe('directory without index', () => {
 
 describe('ignored files', () => {
   it('excludes .test.ts files', () => {
-    root = makeFixture(['src/utils/utils.ts', 'src/utils/utils.test.ts'])
+    root = makeFixture(['src/utils/utils.ts', 'src/utils/utils.test.ts']);
     expect(relativise(generateEntries(root), root)).toEqual({
       'utils/utils': 'src/utils/utils.ts',
-    })
-  })
+    });
+  });
 
   it('excludes .spec.ts files', () => {
-    root = makeFixture(['src/utils/utils.ts', 'src/utils/utils.spec.ts'])
+    root = makeFixture(['src/utils/utils.ts', 'src/utils/utils.spec.ts']);
     expect(relativise(generateEntries(root), root)).toEqual({
       'utils/utils': 'src/utils/utils.ts',
-    })
-  })
+    });
+  });
 
   it('excludes .stories.tsx files', () => {
-    root = makeFixture(['src/Button/Button.tsx', 'src/Button/Button.stories.tsx'])
+    root = makeFixture(['src/Button/Button.tsx', 'src/Button/Button.stories.tsx']);
     expect(relativise(generateEntries(root), root)).toEqual({
       'Button/Button': 'src/Button/Button.tsx',
-    })
-  })
+    });
+  });
 
   it('excludes .d.ts declaration files', () => {
     // index.ts is present → dir key "types", and global.d.ts is ignored
-    root = makeFixture(['src/types/index.ts', 'src/types/global.d.ts'])
+    root = makeFixture(['src/types/index.ts', 'src/types/global.d.ts']);
     expect(relativise(generateEntries(root), root)).toEqual({
       types: 'src/types/index.ts',
-    })
-  })
+    });
+  });
 
   it('excludes .d.ts when there is no index (standalone file)', () => {
-    root = makeFixture(['src/types/UserDTO.ts', 'src/types/global.d.ts'])
+    root = makeFixture(['src/types/UserDTO.ts', 'src/types/global.d.ts']);
     expect(relativise(generateEntries(root), root)).toEqual({
       'types/UserDTO': 'src/types/UserDTO.ts',
-    })
-  })
+    });
+  });
 
   it('excludes non-JS/TS files', () => {
-    root = makeFixture(['src/Users/index.ts', 'src/Users/styles.css', 'src/Users/README.md'])
+    root = makeFixture(['src/Users/index.ts', 'src/Users/styles.css', 'src/Users/README.md']);
     expect(relativise(generateEntries(root), root)).toEqual({
       Users: 'src/Users/index.ts',
-    })
-  })
-})
+    });
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Mixed / realistic tree
@@ -172,12 +173,12 @@ describe('realistic project tree', () => {
       'src/Users/index.ts',
       'src/Users/domain/user.ts',
       'src/Users/types/UserDTO.ts',
-      'src/Users/Users.test.ts',   // ignored
-      'src/Button/Button.tsx',     // no index
+      'src/Users/Users.test.ts', // ignored
+      'src/Button/Button.tsx', // no index
       'src/Button/Button.test.tsx', // ignored
       'src/utils/utils.ts',
       'src/utils/helpers.ts',
-    ])
+    ]);
 
     expect(relativise(generateEntries(root), root)).toEqual({
       index: 'src/index.ts',
@@ -187,90 +188,87 @@ describe('realistic project tree', () => {
       'Button/Button': 'src/Button/Button.tsx',
       'utils/utils': 'src/utils/utils.ts',
       'utils/helpers': 'src/utils/helpers.ts',
-    })
-  })
-})
+    });
+  });
+});
 
 describe('safety and configuration', () => {
-  const symlinkIt = process.platform === 'win32' ? it.skip : it
+  const symlinkIt = process.platform === 'win32' ? it.skip : it;
 
   it('keeps __proto__ as an own entry key', () => {
-    root = makeFixture(['src/__proto__.ts'])
+    root = makeFixture(['src/__proto__.ts']);
 
-    const entries = generateEntries(root)
-    expect(Object.keys(entries)).toEqual(['__proto__'])
-    expect(entries.__proto__).toBe(join(root, 'src/__proto__.ts'))
-  })
+    const entries = generateEntries(root);
+
+    expect(Object.keys(entries)).toEqual(['__proto__']);
+    expect(Object.getOwnPropertyDescriptor(entries, '__proto__')?.value).toBe(
+      join(root, 'src/__proto__.ts'),
+    );
+  });
 
   it('throws when multiple source files produce the same entry key', () => {
-    root = makeFixture(['src/utils/helper.js', 'src/utils/helper.ts'])
+    root = makeFixture(['src/utils/helper.js', 'src/utils/helper.ts']);
 
-    expect(() => generateEntries(root)).toThrow('Duplicate entry key "utils/helper"')
-  })
+    expect(() => generateEntries(root)).toThrow('Duplicate entry key "utils/helper"');
+  });
 
   it('throws when a directory contains multiple index files', () => {
-    root = makeFixture(['src/Users/index.js', 'src/Users/index.ts'])
+    root = makeFixture(['src/Users/index.js', 'src/Users/index.ts']);
 
-    expect(() => generateEntries(root)).toThrow('Multiple index files')
-  })
+    expect(() => generateEntries(root)).toThrow('Multiple index files');
+  });
 
   it('supports explicit collision overwrites', () => {
-    root = makeFixture(['src/utils/helper.js', 'src/utils/helper.ts'])
+    root = makeFixture(['src/utils/helper.js', 'src/utils/helper.ts']);
 
     expect(relativise(generateEntries(root, 'src', { onCollision: 'overwrite' }), root)).toEqual({
       'utils/helper': 'src/utils/helper.ts',
-    })
-  })
+    });
+  });
 
   it('supports include and exclude filters using portable paths', () => {
-    root = makeFixture([
-      'src/public/Button.ts',
-      'src/public/internal.ts',
-      'src/private/secret.ts',
-    ])
+    root = makeFixture(['src/public/Button.ts', 'src/public/internal.ts', 'src/private/secret.ts']);
 
     const entries = generateEntries(root, 'src', {
       include: (path) => !path.endsWith('internal.ts'),
       exclude: (path) => path === 'private',
-    })
+    });
 
     expect(relativise(entries, root)).toEqual({
       'public/Button': 'src/public/Button.ts',
-    })
-  })
+    });
+  });
 
   symlinkIt('ignores symbolic links by default', () => {
-    root = makeFixture(['src/index.ts', 'outside/secret.ts'])
-    symlinkSync(join(root, 'outside'), join(root, 'src/linked'))
+    root = makeFixture(['src/index.ts', 'outside/secret.ts']);
+    symlinkSync(join(root, 'outside'), join(root, 'src/linked'));
 
     expect(relativise(generateEntries(root), root)).toEqual({
       index: 'src/index.ts',
-    })
-  })
+    });
+  });
 
   symlinkIt('follows internal symbolic links only when enabled', () => {
-    root = makeFixture(['src/shared/value.ts'])
-    symlinkSync(join(root, 'src/shared'), join(root, 'src/linked'))
+    root = makeFixture(['src/shared/value.ts']);
+    symlinkSync(join(root, 'src/shared'), join(root, 'src/linked'));
 
-    expect(
-      relativise(generateEntries(root, 'src', { followSymlinks: true }), root)
-    ).toEqual({
+    expect(relativise(generateEntries(root, 'src', { followSymlinks: true }), root)).toEqual({
       'linked/value': 'src/linked/value.ts',
-    })
-  })
+    });
+  });
 
   symlinkIt('rejects symbolic links that escape the source directory', () => {
-    root = makeFixture(['src/index.ts', 'outside/secret.ts'])
-    symlinkSync(join(root, 'outside'), join(root, 'src/linked'))
+    root = makeFixture(['src/index.ts', 'outside/secret.ts']);
+    symlinkSync(join(root, 'outside'), join(root, 'src/linked'));
 
-    expect(() =>
-      generateEntries(root, 'src', { followSymlinks: true })
-    ).toThrow('Symbolic link escapes source directory')
-  })
+    expect(() => generateEntries(root, 'src', { followSymlinks: true })).toThrow(
+      'Symbolic link escapes source directory',
+    );
+  });
 
   it('reports a clear error when the source directory is missing', () => {
-    root = makeFixture(['package.json'])
+    root = makeFixture(['package.json']);
 
-    expect(() => generateEntries(root)).toThrow('Source directory does not exist or is unreadable')
-  })
-})
+    expect(() => generateEntries(root)).toThrow('Source directory does not exist or is unreadable');
+  });
+});

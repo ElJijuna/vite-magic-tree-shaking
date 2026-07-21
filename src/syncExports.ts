@@ -1,48 +1,42 @@
-import {
-  existsSync,
-  readFileSync,
-  renameSync,
-  statSync,
-  unlinkSync,
-  writeFileSync,
-} from 'node:fs'
-import { basename, dirname, extname, isAbsolute, posix, relative, resolve } from 'node:path'
-import type { EntryRecord } from './generateEntries.js'
+import { existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { basename, dirname, extname, isAbsolute, posix, relative, resolve } from 'node:path';
+import type { EntryRecord } from './generateEntries.js';
 
 export type ExportConditions = {
-  types?: string
-  import?: string
-  require?: string
-}
+  types?: string;
+  import?: string;
+  require?: string;
+};
 
-export type ExportsMap = Record<string, ExportConditions>
+export type ExportsMap = Record<string, ExportConditions>;
 
-export type ExportFormat = 'es' | 'cjs'
+export type ExportFormat = 'es' | 'cjs';
 
 export type ExportsOptions = {
   /** Absolute source directory used to map declaration output paths. */
-  sourceRoot?: string
+  sourceRoot?: string;
   /** JavaScript output directory relative to the package root. @default 'dist' */
-  outDir?: string
+  outDir?: string;
   /** Declaration output directory relative to the package root. Defaults to `outDir`. */
-  typesOutDir?: string
+  typesOutDir?: string;
   /** JavaScript formats emitted by the build. @default ['es', 'cjs'] */
-  formats?: readonly ExportFormat[]
+  formats?: readonly ExportFormat[];
   /** Include TypeScript declaration conditions. @default true */
-  includeTypes?: boolean
+  includeTypes?: boolean;
   /** ES module file extension. @default '.js' */
-  importExtension?: string
+  importExtension?: string;
   /** CommonJS file extension. @default '.cjs' */
-  requireExtension?: string
-}
+  requireExtension?: string;
+};
 
 export type ExportsComparisonOptions = {
   /** Ignore export keys not managed by the generated map. @default false */
-  allowExtra?: boolean
-}
+  allowExtra?: boolean;
+};
 
 function normaliseRelativeOutputPath(path: string, optionName: string): string {
-  const normalised = path.replace(/\\/g, '/').replace(/^\.\//, '')
+  const normalised = path.replace(/\\/g, '/').replace(/^\.\//, '');
+
   if (
     !normalised ||
     normalised.includes('\0') ||
@@ -51,192 +45,225 @@ function normaliseRelativeOutputPath(path: string, optionName: string): string {
     normalised === '..' ||
     normalised.startsWith('../')
   ) {
-    throw new Error(`${optionName} must be a non-empty path inside the package`)
+    throw new Error(`${optionName} must be a non-empty path inside the package`);
   }
-  return normalised.replace(/\/$/, '')
+
+  return normalised.replace(/\/$/, '');
 }
 
 function validateEntryKey(key: string): void {
-  const normalised = key.replace(/\\/g, '/')
+  const normalised = key.replace(/\\/g, '/');
+
   if (
     !normalised ||
     normalised.startsWith('/') ||
     normalised.split('/').some((segment) => segment === '' || segment === '.' || segment === '..')
   ) {
-    throw new Error(`Invalid entry key: ${key}`)
+    throw new Error(`Invalid entry key: ${key}`);
   }
 }
 
 function validateExtension(extension: string, optionName: string): string {
   if (!/^\.[A-Za-z0-9]+$/.test(extension)) {
-    throw new Error(`${optionName} must be a file extension such as .js or .cjs`)
+    throw new Error(`${optionName} must be a file extension such as .js or .cjs`);
   }
-  return extension
+
+  return extension;
 }
 
 function packageTarget(...parts: string[]): string {
-  return `./${posix.join(...parts)}`
+  return `./${posix.join(...parts)}`;
 }
 
 function declarationExtension(sourcePath: string): string {
-  const extension = extname(sourcePath)
-  if (extension === '.mts') return '.d.mts'
-  if (extension === '.cts') return '.d.cts'
-  return '.d.ts'
+  const extension = extname(sourcePath);
+
+  if (extension === '.mts') {
+    return '.d.mts';
+  }
+
+  if (extension === '.cts') {
+    return '.d.cts';
+  }
+
+  return '.d.ts';
 }
 
 function declarationPath(key: string, sourcePath: string, options: ExportsOptions): string {
   const typesOutDir = normaliseRelativeOutputPath(
     options.typesOutDir ?? options.outDir ?? 'dist',
-    'typesOutDir'
-  )
-  let sourceRelativePath = key
+    'typesOutDir',
+  );
+
+  let sourceRelativePath = key;
 
   if (options.sourceRoot) {
-    sourceRelativePath = relative(options.sourceRoot, sourcePath).replace(/\\/g, '/')
+    sourceRelativePath = relative(options.sourceRoot, sourcePath).replace(/\\/g, '/');
+
     if (
       isAbsolute(sourceRelativePath) ||
       sourceRelativePath === '..' ||
       sourceRelativePath.startsWith('../')
     ) {
-      throw new Error(`Entry is outside sourceRoot: ${sourcePath}`)
+      throw new Error(`Entry is outside sourceRoot: ${sourcePath}`);
     }
   }
 
-  const extension = extname(sourceRelativePath)
+  const extension = extname(sourceRelativePath);
   const withoutExtension = extension
     ? sourceRelativePath.slice(0, -extension.length)
-    : sourceRelativePath
-  return packageTarget(typesOutDir, `${withoutExtension}${declarationExtension(sourcePath)}`)
+    : sourceRelativePath;
+
+  return packageTarget(typesOutDir, `${withoutExtension}${declarationExtension(sourcePath)}`);
 }
 
 export function entryRecordToExports(
   entries: EntryRecord,
-  options: ExportsOptions = {}
+  options: ExportsOptions = {},
 ): ExportsMap {
-  const result = Object.create(null) as ExportsMap
-  const outDir = normaliseRelativeOutputPath(options.outDir ?? 'dist', 'outDir')
-  const formats = new Set(options.formats ?? ['es', 'cjs'])
+  const result = Object.create(null) as ExportsMap;
+  const outDir = normaliseRelativeOutputPath(options.outDir ?? 'dist', 'outDir');
+  const formats = new Set(options.formats ?? ['es', 'cjs']);
+
   if ([...formats].some((format) => format !== 'es' && format !== 'cjs')) {
-    throw new Error('formats accepts only es and cjs')
+    throw new Error('formats accepts only es and cjs');
   }
-  const importExtension = validateExtension(options.importExtension ?? '.js', 'importExtension')
-  const requireExtension = validateExtension(options.requireExtension ?? '.cjs', 'requireExtension')
+
+  const importExtension = validateExtension(options.importExtension ?? '.js', 'importExtension');
+  const requireExtension = validateExtension(
+    options.requireExtension ?? '.cjs',
+    'requireExtension',
+  );
 
   for (const key of Object.keys(entries).sort()) {
-    validateEntryKey(key)
-    const exportKey = key === 'index' ? '.' : `./${key}`
-    const conditions: ExportConditions = {}
+    validateEntryKey(key);
+    const exportKey = key === 'index' ? '.' : `./${key}`;
+    const conditions: ExportConditions = {};
+
     if (options.includeTypes !== false) {
-      conditions.types = declarationPath(key, entries[key], options)
+      conditions.types = declarationPath(key, entries[key], options);
     }
+
     if (formats.has('es')) {
-      conditions.import = packageTarget(outDir, `${key}${importExtension}`)
+      conditions.import = packageTarget(outDir, `${key}${importExtension}`);
     }
+
     if (formats.has('cjs')) {
-      conditions.require = packageTarget(outDir, `${key}${requireExtension}`)
+      conditions.require = packageTarget(outDir, `${key}${requireExtension}`);
     }
+
     if (Object.keys(conditions).length === 0) {
-      throw new Error('At least one export condition must be enabled')
+      throw new Error('At least one export condition must be enabled');
     }
-    result[exportKey] = conditions
+
+    result[exportKey] = conditions;
   }
-  return result
+
+  return result;
 }
 
 export function readPackageJson(rootDir: string): Record<string, unknown> {
-  const pkgPath = resolve(rootDir, 'package.json')
-  const parsed = JSON.parse(readFileSync(pkgPath, 'utf-8')) as unknown
+  const pkgPath = resolve(rootDir, 'package.json');
+  const parsed = JSON.parse(readFileSync(pkgPath, 'utf-8')) as unknown;
+
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error(`package.json must contain a JSON object: ${pkgPath}`)
+    throw new Error(`package.json must contain a JSON object: ${pkgPath}`);
   }
-  return parsed as Record<string, unknown>
+
+  return parsed as Record<string, unknown>;
 }
 
 export function writePackageJson(rootDir: string, pkg: Record<string, unknown>): void {
-  const pkgPath = resolve(rootDir, 'package.json')
-  const original = readFileSync(pkgPath, 'utf-8')
-  const indentMatch = original.match(/\n([ \t]+)"/)
-  const indent = indentMatch?.[1] ?? '  '
-  const finalNewline = original.endsWith('\n') ? '\n' : ''
+  const pkgPath = resolve(rootDir, 'package.json');
+  const original = readFileSync(pkgPath, 'utf-8');
+  const indentMatch = original.match(/\n([ \t]+)"/);
+  const indent = indentMatch?.[1] ?? '  ';
+  const finalNewline = original.endsWith('\n') ? '\n' : '';
   const temporaryPath = resolve(
     dirname(pkgPath),
-    `.${basename(pkgPath)}.${process.pid}.${Date.now()}.tmp`
-  )
+    `.${basename(pkgPath)}.${process.pid}.${Date.now()}.tmp`,
+  );
 
   try {
     writeFileSync(temporaryPath, JSON.stringify(pkg, null, indent) + finalNewline, {
       encoding: 'utf-8',
       flag: 'wx',
       mode: statSync(pkgPath).mode,
-    })
-    renameSync(temporaryPath, pkgPath)
+    });
+    renameSync(temporaryPath, pkgPath);
   } catch (error) {
-    if (existsSync(temporaryPath)) unlinkSync(temporaryPath)
-    throw error
+    if (existsSync(temporaryPath)) {
+      unlinkSync(temporaryPath);
+    }
+
+    throw error;
   }
 }
 
 export function exportsAreSynced(
   current: unknown,
   expected: Record<string, unknown>,
-  options: ExportsComparisonOptions = {}
+  options: ExportsComparisonOptions = {},
 ): boolean {
-  const difference = diffExports(current, expected)
+  const difference = diffExports(current, expected);
+
   return (
     difference.missing.length === 0 &&
     difference.changed.length === 0 &&
     (options.allowExtra === true || difference.extra.length === 0)
-  )
+  );
 }
 
 export type ExportsDiff = {
-  missing: string[]
-  extra: string[]
-  changed: string[]
-}
+  missing: string[];
+  extra: string[];
+  changed: string[];
+};
 
-export function diffExports(
-  current: unknown,
-  expected: Record<string, unknown>
-): ExportsDiff {
+export function diffExports(current: unknown, expected: Record<string, unknown>): ExportsDiff {
   const cur = (
     current && typeof current === 'object' && !Array.isArray(current) ? current : {}
-  ) as Record<string, unknown>
-  const missing: string[] = []
-  const extra: string[] = []
-  const changed: string[] = []
+  ) as Record<string, unknown>;
+  const missing: string[] = [];
+  const extra: string[] = [];
+  const changed: string[] = [];
 
   for (const key of Object.keys(expected)) {
     if (!(key in cur)) {
-      missing.push(key)
+      missing.push(key);
     } else if (JSON.stringify(cur[key]) !== JSON.stringify(expected[key])) {
-      changed.push(key)
+      changed.push(key);
     }
   }
 
   for (const key of Object.keys(cur)) {
     if (!(key in expected)) {
-      extra.push(key)
+      extra.push(key);
     }
   }
 
-  return { missing, extra, changed }
+  return { missing, extra, changed };
 }
 
 export function mergeExports(
   current: unknown,
   expected: ExportsMap,
-  options: { prune?: boolean } = {}
+  options: { prune?: boolean } = {},
 ): Record<string, unknown> {
   const currentMap = (
     current && typeof current === 'object' && !Array.isArray(current) ? current : {}
-  ) as Record<string, unknown>
-  const merged = Object.create(null) as Record<string, unknown>
+  ) as Record<string, unknown>;
+  const merged = Object.create(null) as Record<string, unknown>;
 
   if (!options.prune) {
-    for (const key of Object.keys(currentMap)) merged[key] = currentMap[key]
+    for (const key of Object.keys(currentMap)) {
+      merged[key] = currentMap[key];
+    }
   }
-  for (const key of Object.keys(expected)) merged[key] = expected[key]
-  return merged
+
+  for (const key of Object.keys(expected)) {
+    merged[key] = expected[key];
+  }
+
+  return merged;
 }

@@ -1,16 +1,12 @@
 {
+  "extends": "super-configs/tsconfig/node",
   "compilerOptions": {
-    "target": "ES2020",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "lib": ["ES2020"],
-    "strict": true,
+    "lib": ["ES2022"],
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "dist",
-    "rootDir": "src",
-    "skipLibCheck": true
+    "rootDir": "src"
   },
   "include": ["src"]
 }

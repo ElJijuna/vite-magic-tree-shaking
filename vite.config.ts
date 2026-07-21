@@ -1,8 +1,8 @@
-import { defineConfig, type Plugin } from 'vite'
-import { resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { defineConfig, type Plugin } from 'vite';
 
-const __dirname = fileURLToPath(new URL('.', import.meta.url))
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 function addShebang(): Plugin {
   return {
@@ -10,11 +10,11 @@ function addShebang(): Plugin {
     generateBundle(_, bundle) {
       for (const [fileName, chunk] of Object.entries(bundle)) {
         if (fileName === 'cli.js' && chunk.type === 'chunk') {
-          chunk.code = '#!/usr/bin/env node\n' + chunk.code
+          chunk.code = `#!/usr/bin/env node\n${chunk.code}`;
         }
       }
     },
-  }
+  };
 }
 
 export default defineConfig({
@@ -32,4 +32,4 @@ export default defineConfig({
       external: ['node:path', 'node:fs', 'node:url'],
     },
   },
-})
+});

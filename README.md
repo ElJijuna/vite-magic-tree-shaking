@@ -56,7 +56,7 @@ entry: generateEntries(__dirname, 'src', {
 })
 ```
 
-```
+```text
 [vite-magic-tree-shaking] package.json exports are out of sync with src entries.
 Run: npx vite-magic-tree-shaking generate
 ```
@@ -87,7 +87,7 @@ npx vite-magic-tree-shaking generate --dry-run
 
 Example output:
 
-```
+```text
 ✓ package.json exports updated:
   .
   ./Button/Button
@@ -111,13 +111,13 @@ npx vite-magic-tree-shaking validate --strict
 
 Example output when in sync:
 
-```
+```text
 ✓ package.json exports are in sync
 ```
 
 Example output from strict validation when out of sync:
 
-```
+```text
 ✗ package.json exports are out of sync with src entries
   Missing : ./NewFeature
   Extra   : ./OldFeature
@@ -144,7 +144,7 @@ if `package.json` exports are stale, before Vite even starts.
 ### CLI options
 
 | Option | Purpose |
-|---|---|
+| --- | --- |
 | `--formats es,cjs` | Match the formats emitted by Vite |
 | `--out-dir dist` | Set the JavaScript output directory |
 | `--types-dir dist` | Set the declaration output directory |
@@ -157,7 +157,7 @@ if `package.json` exports are stale, before Vite even starts.
 
 Given this structure:
 
-```
+```text
 src/
 ├── index.ts
 ├── Users/
@@ -219,15 +219,17 @@ And `vite-magic generate` writes the corresponding `exports` to `package.json`:
 ### Rules
 
 | Source | Entry key |
-|---|---|
+| --- | --- |
 | `src/index.ts` | `index` |
 | `src/Users/index.ts` | `Users` |
 | `src/Button/Button.tsx` (no index in dir) | `Button/Button` |
 | `src/Users/domain/user.ts` (subdir of indexed dir) | `Users/domain/user` |
 
-Directories with an `index` file use the **directory name** as key. Their subdirectories are still scanned recursively.
+Directories with an `index` file use the **directory name** as key. Their
+subdirectories are still scanned recursively.
 
-Directories without an `index` expose **each file individually** using its relative path (without extension).
+Directories without an `index` expose **each file individually** using its
+relative path (without extension).
 
 Symbolic links are ignored by default. Set `followSymlinks: true` to follow links
 whose resolved target remains inside the source directory. Duplicate entry keys
@@ -250,7 +252,7 @@ generateEntries(rootDir: string, srcDir?: string, options?: GenerateEntriesOptio
 ```
 
 | Parameter | Type | Default | Description |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `rootDir` | `string` | — | Absolute path to the project root |
 | `srcDir` | `string` | `'src'` | Source directory name, relative to `rootDir` |
 | `options` | `GenerateEntriesOptions` | `{}` | Optional configuration |
@@ -258,7 +260,7 @@ generateEntries(rootDir: string, srcDir?: string, options?: GenerateEntriesOptio
 ### `GenerateEntriesOptions`
 
 | Option | Type | Default | Description |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `warnOnExportsMismatch` | `boolean` | `false` | Emit a `console.warn` if `package.json` exports do not match the resolved entries |
 | `followSymlinks` | `boolean` | `false` | Follow links that stay inside `srcDir` |
 | `include` | `(path: string) => boolean` | — | Include matching valid source files |

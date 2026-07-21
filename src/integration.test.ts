@@ -1,25 +1,29 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
-import { execFileSync } from 'node:child_process'
-import { build } from 'vite'
-import { entryRecordToExports } from './syncExports.js'
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { build } from 'vite';
+import { afterEach, describe, expect, it } from 'vitest';
+import { entryRecordToExports } from './syncExports.js';
 
-let root: string | undefined
+let root: string | undefined;
 
 afterEach(() => {
-  if (root) rmSync(root, { recursive: true, force: true })
-  root = undefined
-})
+  if (root) {
+    rmSync(root, { recursive: true, force: true });
+  }
+
+  root = undefined;
+});
 
 describe('generated exports integration', () => {
   it('points to files emitted by an ES-only Vite and TypeScript build', async () => {
-    root = mkdtempSync(join(tmpdir(), 'vite-exports-integration-'))
-    const sourceRoot = join(root, 'src')
-    const source = join(sourceRoot, 'Users/index.ts')
-    mkdirSync(join(sourceRoot, 'Users'), { recursive: true })
-    writeFileSync(source, 'export type User = { id: string }\nexport const user = { id: "1" }\n')
+    root = mkdtempSync(join(tmpdir(), 'vite-exports-integration-'));
+    const sourceRoot = join(root, 'src');
+    const source = join(sourceRoot, 'Users/index.ts');
+
+    mkdirSync(join(sourceRoot, 'Users'), { recursive: true });
+    writeFileSync(source, 'export type User = { id: string }\nexport const user = { id: "1" }\n');
 
     await build({
       configFile: false,
@@ -32,7 +36,7 @@ describe('generated exports integration', () => {
           fileName: (_, entryName) => `${entryName}.js`,
         },
       },
-    })
+    });
 
     execFileSync(
       process.execPath,
@@ -46,16 +50,15 @@ describe('generated exports integration', () => {
         'dist',
         'src/Users/index.ts',
       ],
-      { cwd: root }
-    )
+      { cwd: root },
+    );
 
-    const generated = entryRecordToExports(
-      { Users: source },
-      { sourceRoot, formats: ['es'] }
-    )['./Users']
+    const generated = entryRecordToExports({ Users: source }, { sourceRoot, formats: ['es'] })[
+      './Users'
+    ];
 
-    expect(generated.require).toBeUndefined()
-    expect(generated.import && existsSync(resolve(root, generated.import))).toBe(true)
-    expect(generated.types && existsSync(resolve(root, generated.types))).toBe(true)
-  })
-})
+    expect(generated.require).toBeUndefined();
+    expect(generated.import && existsSync(resolve(root, generated.import))).toBe(true);
+    expect(generated.types && existsSync(resolve(root, generated.types))).toBe(true);
+  });
+});

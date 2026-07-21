@@ -1,0 +1,14 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "extends": "./node_modules/super-configs/typedoc.json",
+  "entryPoints": ["src/index.ts"],
+  "out": "docs",
+  "name": "vite-magic-tree-shaking",
+  "readme": "README.md",
+  "exclude": ["**/*.test.ts", "**/*.spec.ts", "**/test/**"],
+  "navigationLinks": {
+    "npm": "https://www.npmjs.com/package/vite-magic-tree-shaking",
+    "GitHub": "https://github.com/ElJijuna/vite-magic-tree-shaking"
+  },
+  "plugin": []
+}

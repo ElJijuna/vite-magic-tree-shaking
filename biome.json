@@ -1,0 +1,15 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.5/schema.json",
+  "extends": ["super-configs/biome"],
+  "files": {
+    "ignoreUnknown": true,
+    "includes": [
+      "!dist",
+      "!coverage",
+      "!docs",
+      "!node_modules",
+      "!package-lock.json",
+      "!CHANGELOG.md"
+    ]
+  }
+}
