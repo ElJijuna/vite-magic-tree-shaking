@@ -29,7 +29,7 @@ export default defineConfig({
       fileName: (format, entryName) => `${entryName}.${format === 'es' ? 'js' : 'cjs'}`,
     },
     rollupOptions: {
-      external: ['node:path', 'node:fs', 'node:process'],
+      external: ['node:path', 'node:fs', 'node:url'],
     },
   },
 })

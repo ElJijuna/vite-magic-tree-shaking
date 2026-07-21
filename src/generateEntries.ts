@@ -1,6 +1,11 @@
 import { resolve, relative, join, extname, isAbsolute, sep } from 'node:path'
 import { readdirSync, statSync, realpathSync } from 'node:fs'
-import { entryRecordToExports, exportsAreSynced, readPackageJson } from './syncExports.js'
+import {
+  entryRecordToExports,
+  exportsAreSynced,
+  readPackageJson,
+  type ExportsOptions,
+} from './syncExports.js'
 
 export type EntryRecord = Record<string, string>
 
@@ -27,6 +32,9 @@ export interface GenerateEntriesOptions {
 
   /** How duplicate entry keys are handled. @default 'error' */
   onCollision?: 'error' | 'overwrite'
+
+  /** Output contract used by `warnOnExportsMismatch`. */
+  exports?: Omit<ExportsOptions, 'sourceRoot'>
 }
 
 const VALID_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts']
@@ -269,15 +277,19 @@ export function generateEntries(
   if (options.warnOnExportsMismatch) {
     try {
       const pkg = readPackageJson(rootDir)
-      const expected = entryRecordToExports(entries)
-      if (!exportsAreSynced(pkg.exports, expected)) {
+      const expected = entryRecordToExports(entries, {
+        ...options.exports,
+        sourceRoot: absoluteSrc,
+      })
+      if (!exportsAreSynced(pkg.exports, expected, { allowExtra: true })) {
         console.warn(
           '[vite-magic-tree-shaking] package.json exports are out of sync with src entries.\n' +
-          'Run: npx vite-magic generate'
+          'Run: npx vite-magic-tree-shaking generate'
         )
       }
-    } catch {
-      // silently skip if package.json is unreadable
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.warn(`[vite-magic-tree-shaking] Could not validate package exports: ${message}`)
     }
   }
 
