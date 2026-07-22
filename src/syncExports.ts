@@ -29,6 +29,16 @@ export type ExportsOptions = {
   requireExtension?: string;
 };
 
+export type ResolvedExportsOptions = {
+  sourceRoot?: string;
+  outDir: string;
+  typesOutDir: string;
+  formats: readonly ExportFormat[];
+  includeTypes: boolean;
+  importExtension: string;
+  requireExtension: string;
+};
+
 export type ExportsComparisonOptions = {
   /** Ignore export keys not managed by the generated map. @default false */
   allowExtra?: boolean;
@@ -71,6 +81,26 @@ function validateExtension(extension: string, optionName: string): string {
   return extension;
 }
 
+/** Resolves and validates the output contract shared by Vite, the CLI, and package exports. */
+export function resolveExportsOptions(options: ExportsOptions = {}): ResolvedExportsOptions {
+  const outDir = normaliseRelativeOutputPath(options.outDir ?? 'dist', 'outDir');
+  const formats = [...new Set<ExportFormat>(options.formats ?? ['es', 'cjs'])];
+
+  if (formats.some((format) => format !== 'es' && format !== 'cjs')) {
+    throw new Error('formats accepts only es and cjs');
+  }
+
+  return {
+    sourceRoot: options.sourceRoot,
+    outDir,
+    typesOutDir: normaliseRelativeOutputPath(options.typesOutDir ?? outDir, 'typesOutDir'),
+    formats,
+    includeTypes: options.includeTypes !== false,
+    importExtension: validateExtension(options.importExtension ?? '.js', 'importExtension'),
+    requireExtension: validateExtension(options.requireExtension ?? '.cjs', 'requireExtension'),
+  };
+}
+
 function packageTarget(...parts: string[]): string {
   return `./${posix.join(...parts)}`;
 }
@@ -89,12 +119,7 @@ function declarationExtension(sourcePath: string): string {
   return '.d.ts';
 }
 
-function declarationPath(key: string, sourcePath: string, options: ExportsOptions): string {
-  const typesOutDir = normaliseRelativeOutputPath(
-    options.typesOutDir ?? options.outDir ?? 'dist',
-    'typesOutDir',
-  );
-
+function declarationPath(key: string, sourcePath: string, options: ResolvedExportsOptions): string {
   let sourceRelativePath = key;
 
   if (options.sourceRoot) {
@@ -114,7 +139,10 @@ function declarationPath(key: string, sourcePath: string, options: ExportsOption
     ? sourceRelativePath.slice(0, -extension.length)
     : sourceRelativePath;
 
-  return packageTarget(typesOutDir, `${withoutExtension}${declarationExtension(sourcePath)}`);
+  return packageTarget(
+    options.typesOutDir,
+    `${withoutExtension}${declarationExtension(sourcePath)}`,
+  );
 }
 
 export function entryRecordToExports(
@@ -122,34 +150,30 @@ export function entryRecordToExports(
   options: ExportsOptions = {},
 ): ExportsMap {
   const result = Object.create(null) as ExportsMap;
-  const outDir = normaliseRelativeOutputPath(options.outDir ?? 'dist', 'outDir');
-  const formats = new Set(options.formats ?? ['es', 'cjs']);
-
-  if ([...formats].some((format) => format !== 'es' && format !== 'cjs')) {
-    throw new Error('formats accepts only es and cjs');
-  }
-
-  const importExtension = validateExtension(options.importExtension ?? '.js', 'importExtension');
-  const requireExtension = validateExtension(
-    options.requireExtension ?? '.cjs',
-    'requireExtension',
-  );
+  const resolvedOptions = resolveExportsOptions(options);
+  const formats = new Set(resolvedOptions.formats);
 
   for (const key of Object.keys(entries).sort()) {
     validateEntryKey(key);
     const exportKey = key === 'index' ? '.' : `./${key}`;
     const conditions: ExportConditions = {};
 
-    if (options.includeTypes !== false) {
-      conditions.types = declarationPath(key, entries[key], options);
+    if (resolvedOptions.includeTypes) {
+      conditions.types = declarationPath(key, entries[key], resolvedOptions);
     }
 
     if (formats.has('es')) {
-      conditions.import = packageTarget(outDir, `${key}${importExtension}`);
+      conditions.import = packageTarget(
+        resolvedOptions.outDir,
+        `${key}${resolvedOptions.importExtension}`,
+      );
     }
 
     if (formats.has('cjs')) {
-      conditions.require = packageTarget(outDir, `${key}${requireExtension}`);
+      conditions.require = packageTarget(
+        resolvedOptions.outDir,
+        `${key}${resolvedOptions.requireExtension}`,
+      );
     }
 
     if (Object.keys(conditions).length === 0) {

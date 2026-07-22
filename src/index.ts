@@ -21,10 +21,12 @@ export type {
   ExportsDiff,
   ExportsMap,
   ExportsOptions,
+  ResolvedExportsOptions,
 } from './syncExports.js';
 export {
   diffExports,
   entryRecordToExports,
   exportsAreSynced,
   mergeExports,
+  resolveExportsOptions,
 } from './syncExports.js';

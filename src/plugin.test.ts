@@ -1,9 +1,10 @@
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { build, type ResolvedConfig, resolveConfig as resolveViteConfig } from 'vite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { viteMagic } from './plugin.js';
+import { entryRecordToExports } from './syncExports.js';
 
 let root: string | undefined;
 
@@ -57,21 +58,40 @@ describe('viteMagic', () => {
       plugins: [
         viteMagic({
           configFile: false,
-          exports: { formats: ['es'], includeTypes: false },
+          exports: {
+            formats: ['es'],
+            outDir: 'build',
+            includeTypes: false,
+            importExtension: '.mjs',
+          },
         }),
       ],
     });
 
-    expect(readdirSync(join(project, 'dist')).some((file) => /\.(?:mjs|cjs|js)$/.test(file))).toBe(
-      true,
+    const exportMap = entryRecordToExports(
+      { index: join(project, 'src/index.ts') },
+      {
+        sourceRoot: join(project, 'src'),
+        formats: ['es'],
+        outDir: 'build',
+        includeTypes: false,
+        importExtension: '.mjs',
+      },
     );
+    const importTarget = exportMap['.'].import;
+
+    expect(importTarget && existsSync(resolve(project, importTarget))).toBe(true);
   });
 
   it('generates build.lib.entry and preserves other library options', async () => {
     const project = fixture();
     const config = await resolved(
       project,
-      viteMagic({ configFile: false, library: { formats: ['es'] } }),
+      viteMagic({
+        configFile: false,
+        exports: { formats: ['es'] },
+        library: { name: 'Fixture' },
+      }),
     );
 
     expect(libraryEntry(config)).toEqual({ index: join(project, 'src/index.ts') });
@@ -81,6 +101,7 @@ describe('viteMagic', () => {
     }
 
     expect(config.build.lib.formats).toEqual(['es']);
+    expect(config.build.lib.name).toBe('Fixture');
   });
 
   it('discovers vite-magic.config.ts from the Vite root', async () => {
@@ -90,7 +111,7 @@ describe('viteMagic', () => {
     writeFileSync(join(project, 'lib/index.ts'), '');
     writeFileSync(
       join(project, 'vite-magic.config.ts'),
-      "export default { srcDir: 'lib', exports: { formats: ['es'] } }\n",
+      "export default { srcDir: 'lib', exports: { formats: ['es'], outDir: 'build', importExtension: '.mjs' } }\n",
     );
 
     const config = await resolved(project, viteMagic());
@@ -102,6 +123,20 @@ describe('viteMagic', () => {
     }
 
     expect(config.build.lib.formats).toEqual(['es']);
+    expect(config.build.outDir).toBe(join(project, 'build'));
+    expect(config.build.lib.fileName).toBeTypeOf('function');
+    expect(
+      typeof config.build.lib.fileName === 'function' && config.build.lib.fileName('es', 'index'),
+    ).toBe('index.mjs');
+
+    const { output } = config.build.rollupOptions;
+
+    if (!output || Array.isArray(output)) {
+      throw new Error('Expected one Rollup output configuration');
+    }
+
+    expect(output.preserveModules).toBe(true);
+    expect(output.preserveModulesRoot).toBe(join(project, 'lib'));
   });
 
   it('lets inline options override the shared config', async () => {
@@ -131,5 +166,22 @@ describe('viteMagic', () => {
         'build',
       ),
     ).rejects.toThrow('Remove build.lib.entry');
+  });
+
+  it('rejects a duplicate Vite output directory', async () => {
+    const project = fixture();
+
+    await expect(
+      resolveViteConfig(
+        {
+          root: project,
+          configFile: false,
+          logLevel: 'silent',
+          plugins: [viteMagic({ configFile: false })],
+          build: { outDir: 'duplicate' },
+        },
+        'build',
+      ),
+    ).rejects.toThrow('configure exports.outDir instead');
   });
 });

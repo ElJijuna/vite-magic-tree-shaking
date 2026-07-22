@@ -18,26 +18,13 @@ npm install -D vite-magic-tree-shaking
 ```ts
 // vite.config.ts
 import { defineConfig } from 'vite'
-import { fileURLToPath } from 'node:url'
-import { generateEntries } from 'vite-magic-tree-shaking'
-
-const __dirname = fileURLToPath(new URL('.', import.meta.url))
+import { viteMagic } from 'vite-magic-tree-shaking'
 
 export default defineConfig({
+  plugins: [viteMagic()],
   build: {
-    lib: {
-      entry: generateEntries(__dirname),       // scans src/ by default
-      // entry: generateEntries(__dirname, 'lib'), // custom source dir
-      formats: ['es', 'cjs'],
-      fileName: (format, entryName) =>
-        `${entryName}.${format === 'es' ? 'js' : 'cjs'}`,
-    },
     rollupOptions: {
       external: ['react', 'react-dom'],
-      output: {
-        preserveModules: true,
-        preserveModulesRoot: 'src',
-      },
     },
   },
 })
@@ -86,20 +73,35 @@ export default defineConfig({
 })
 ```
 
-The plugin also copies `exports.formats` into Vite's library formats. Additional
-library options can be provided without declaring `entry`:
+The shared config is the single source of truth:
+
+| Shared value | Used by Vite | Used by CLI/export map |
+| --- | --- | --- |
+| `srcDir` | Entries and `preserveModulesRoot` | Source scanning |
+| `exports.formats` | `build.lib.formats` | `import`/`require` conditions |
+| `exports.outDir` | `build.outDir` | JavaScript package targets |
+| Export extensions | `build.lib.fileName` | JavaScript package targets |
+| `exports.typesOutDir` | Declaration-tool input | TypeScript package targets |
+
+Additional library options can still be provided without duplicating generated
+values:
 
 ```ts
 viteMagic({
   library: {
-    fileName: (format, entryName) =>
-      `${entryName}.${format === 'es' ? 'js' : 'cjs'}`,
+    name: 'MyLibrary',
+    cssFileName: 'styles',
   },
 })
 ```
 
-Remove any manual `build.lib.entry` when using the plugin. Inline options passed
-to `viteMagic()` override values from `vite-magic.config.ts`.
+Remove manual `build.lib.entry`, `build.lib.formats`, `build.lib.fileName`,
+`build.outDir`, and `preserveModulesRoot` when using the plugin. Inline options
+passed to `viteMagic()` override values from `vite-magic.config.ts`.
+
+Vite does not emit declarations itself. A declaration plugin can read
+`magicConfig.exports?.typesOutDir` from the same config instead of repeating the
+path value.
 
 ### Manual Vite integration
 

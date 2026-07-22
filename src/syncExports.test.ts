@@ -8,6 +8,7 @@ import {
   exportsAreSynced,
   mergeExports,
   readPackageJson,
+  resolveExportsOptions,
   writePackageJson,
 } from './syncExports.js';
 
@@ -29,6 +30,18 @@ function fixture(): string {
 }
 
 describe('entryRecordToExports', () => {
+  it('resolves one canonical output contract', () => {
+    expect(resolveExportsOptions({ outDir: './build', formats: ['es', 'es'] })).toEqual({
+      sourceRoot: undefined,
+      outDir: 'build',
+      typesOutDir: 'build',
+      formats: ['es'],
+      includeTypes: true,
+      importExtension: '.js',
+      requireExtension: '.cjs',
+    });
+  });
+
   it('only emits conditions for configured formats', () => {
     const project = fixture();
     const source = join(project, 'src/index.ts');
