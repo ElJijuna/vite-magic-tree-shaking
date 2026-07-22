@@ -60,6 +60,7 @@
     "@semantic-release/npm": "^13.1.5",
     "@semantic-release/release-notes-generator": "^14.1.0",
     "@types/node": "^22.20.1",
+    "conventional-changelog-conventionalcommits": "^9.3.1",
     "eslint": "^10.7.0",
     "markdownlint": "^0.40.0",
     "semantic-release": "^25.0.8",
