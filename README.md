@@ -328,6 +328,18 @@ The following are never included as entries:
 - `*.d.ts` / `*.d.mts` / `*.d.cts`
 - Any file with an extension other than `.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, `.cts`
 
+### Framework components
+
+The integration suite builds and imports real React, Vue, and Svelte component
+libraries with their official Vite plugins. React components can be direct
+`.tsx` entries. Vue and Svelte components should be exposed through a supported
+TypeScript entry:
+
+```ts
+export { default as Button } from './Button.vue'
+// or: export { default as Button } from './Button.svelte'
+```
+
 ## API
 
 ```ts

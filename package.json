@@ -59,16 +59,26 @@
     "@semantic-release/github": "^12.0.9",
     "@semantic-release/npm": "^13.1.5",
     "@semantic-release/release-notes-generator": "^14.1.0",
+    "@sveltejs/vite-plugin-svelte": "^7.2.0",
     "@types/node": "^22.20.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/server-renderer": "^3.5.40",
     "conventional-changelog-conventionalcommits": "^9.3.1",
     "eslint": "^10.7.0",
     "markdownlint": "^0.40.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "semantic-release": "^25.0.8",
     "super-configs": "^1.19.0",
+    "svelte": "^5.56.7",
     "typedoc": "^0.28.20",
     "typescript": "^5.9.3",
     "vite": "^8.1.5",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "vue": "^3.5.40"
   },
   "peerDependencies": {
     "vite": ">=5.0.0 <9.0.0"

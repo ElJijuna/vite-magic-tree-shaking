@@ -11,6 +11,7 @@ export default [
       'coverage/**',
       'docs/**',
       'node_modules/**',
+      'test/fixtures/**',
       'vite.config*.ts',
       'vitest.config.ts',
     ],
