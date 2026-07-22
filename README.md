@@ -43,6 +43,49 @@ export default defineConfig({
 })
 ```
 
+## Shared configuration
+
+Create `vite-magic.config.ts` in the project root to share entry and export
+settings between Vite and the CLI:
+
+```ts
+import { defineConfig } from 'vite-magic-tree-shaking'
+
+export default defineConfig({
+  rootDir: '.',
+  srcDir: 'src',
+  followSymlinks: false,
+  exports: {
+    formats: ['es', 'cjs'],
+    outDir: 'dist',
+    typesOutDir: 'dist',
+    includeTypes: true,
+  },
+})
+```
+
+The CLI discovers this file automatically. Command-line options override its
+values, and an alternative file can be selected with `--config <path>`.
+
+Import the same config from `vite.config.ts` to generate the library entry map:
+
+```ts
+import { fileURLToPath } from 'node:url'
+import { defineConfig } from 'vite'
+import { generateEntriesFromConfig } from 'vite-magic-tree-shaking'
+import magicConfig from './vite-magic.config'
+
+const rootDir = fileURLToPath(new URL('.', import.meta.url))
+
+export default defineConfig({
+  build: {
+    lib: {
+      entry: generateEntriesFromConfig(magicConfig, rootDir),
+    },
+  },
+})
+```
+
 ### Warn when `package.json` exports are out of sync
 
 Pass `warnOnExportsMismatch: true` to get a `console.warn` at build/dev time if
@@ -145,6 +188,7 @@ if `package.json` exports are stale, before Vite even starts.
 
 | Option | Purpose |
 | --- | --- |
+| `--config <path>` | Use a custom config file instead of `vite-magic.config.ts` |
 | `--formats es,cjs` | Match the formats emitted by Vite |
 | `--out-dir dist` | Set the JavaScript output directory |
 | `--types-dir dist` | Set the declaration output directory |

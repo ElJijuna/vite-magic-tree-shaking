@@ -1,6 +1,7 @@
 import { realpathSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadConfig, resolveConfig } from './config.js';
 import { generateEntries } from './generateEntries.js';
 import {
   diffExports,
@@ -15,8 +16,9 @@ import {
 
 type ParsedArguments = {
   command?: string;
-  rootDir: string;
-  srcDir: string;
+  rootDir?: string;
+  srcDir?: string;
+  configFile?: string;
   exportsOptions: Omit<ExportsOptions, 'sourceRoot'>;
   dryRun: boolean;
   prune: boolean;
@@ -33,6 +35,7 @@ function printUsage(): void {
   console.log('  validate  Check generated exports against package.json');
   console.log('');
   console.log('Options:');
+  console.log('  --config <path>      Config file (default: vite-magic.config.ts)');
   console.log('  --formats <es,cjs>   Emitted JavaScript formats (default: es,cjs)');
   console.log('  --out-dir <path>     JavaScript output directory (default: dist)');
   console.log('  --types-dir <path>   Declaration output directory (default: out-dir)');
@@ -80,6 +83,7 @@ function parseArguments(argv: string[]): ParsedArguments {
   let strict = false;
   let help = false;
   let version = false;
+  let configFile: string | undefined;
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -96,6 +100,11 @@ function parseArguments(argv: string[]): ParsedArguments {
       strict = true;
     } else if (argument === '--no-types') {
       exportsOptions.includeTypes = false;
+    } else if (argument === '--config' || argument.startsWith('--config=')) {
+      const [value, nextIndex] = optionValue(argv, index, '--config');
+
+      configFile = value;
+      index = nextIndex;
     } else if (argument === '--formats' || argument.startsWith('--formats=')) {
       const [value, nextIndex] = optionValue(argv, index, '--formats');
 
@@ -126,8 +135,9 @@ function parseArguments(argv: string[]): ParsedArguments {
 
   return {
     command,
-    rootDir: positionals[0] ? resolve(positionals[0]) : process.cwd(),
-    srcDir: positionals[1] ?? 'src',
+    rootDir: positionals[0] ? resolve(positionals[0]) : undefined,
+    srcDir: positionals[1],
+    configFile,
     exportsOptions,
     dryRun,
     prune,
@@ -145,7 +155,7 @@ function packageVersion(): string {
   }
 }
 
-export function runCli(argv: string[]): number {
+export async function runCli(argv: string[]): Promise<number> {
   try {
     const args = parseArguments(argv);
 
@@ -173,12 +183,25 @@ export function runCli(argv: string[]): number {
       throw new Error('--strict is only valid with validate');
     }
 
-    const entries = generateEntries(args.rootDir, args.srcDir);
-    const expected = entryRecordToExports(entries, {
+    const searchRoot = args.rootDir ?? process.cwd();
+    const loadedConfig = await loadConfig(searchRoot, args.configFile);
+    const configDir = loadedConfig ? dirname(loadedConfig.path) : searchRoot;
+    const resolvedConfig = resolveConfig(loadedConfig?.config ?? {}, configDir);
+    const rootDir = args.rootDir ?? resolvedConfig.rootDir;
+    const srcDir = args.srcDir ?? resolvedConfig.srcDir;
+    const exportsOptions = {
+      ...resolvedConfig.options.exports,
       ...args.exportsOptions,
-      sourceRoot: resolve(args.rootDir, args.srcDir),
+    };
+    const entries = generateEntries(rootDir, srcDir, {
+      ...resolvedConfig.options,
+      exports: exportsOptions,
     });
-    const pkg = readPackageJson(args.rootDir);
+    const expected = entryRecordToExports(entries, {
+      ...exportsOptions,
+      sourceRoot: resolve(rootDir, srcDir),
+    });
+    const pkg = readPackageJson(rootDir);
 
     if (args.command === 'generate') {
       const nextExports = mergeExports(pkg.exports, expected, { prune: args.prune });
@@ -195,7 +218,7 @@ export function runCli(argv: string[]): number {
         console.log('Package exports would be updated:');
       } else {
         pkg.exports = nextExports;
-        writePackageJson(args.rootDir, pkg);
+        writePackageJson(rootDir, pkg);
         console.log('✓ package.json exports updated:');
       }
 
@@ -263,6 +286,10 @@ function isMainModule(): boolean {
   }
 }
 
+async function main(): Promise<void> {
+  process.exitCode = await runCli(process.argv.slice(2));
+}
+
 if (isMainModule()) {
-  process.exitCode = runCli(process.argv.slice(2));
+  void main();
 }

@@ -1,3 +1,15 @@
+export type {
+  LoadedViteMagicConfig,
+  ResolvedViteMagicConfig,
+  ViteMagicConfig,
+} from './config.js';
+export {
+  DEFAULT_CONFIG_FILE,
+  defineConfig,
+  generateEntriesFromConfig,
+  loadConfig,
+  resolveConfig,
+} from './config.js';
 export type { EntryRecord, GenerateEntriesOptions } from './generateEntries.js';
 export { generateEntries } from './generateEntries.js';
 export type {
