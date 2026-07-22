@@ -151,6 +151,49 @@ describe('viteMagic', () => {
     expect(libraryEntry(config)).toEqual({ index: join(project, 'src/index.ts') });
   });
 
+  it('inherits shared config from a monorepo root while scanning the workspace', async () => {
+    const project = fixture();
+    const workspace = join(project, 'packages/ui');
+
+    mkdirSync(join(workspace, 'source'), { recursive: true });
+    writeFileSync(join(workspace, 'source/index.ts'), 'export const value = 1\n');
+    writeFileSync(join(project, 'package.json'), '{"private":true,"workspaces":["packages/*"]}\n');
+    writeFileSync(join(workspace, 'package.json'), '{"name":"@fixture/ui"}\n');
+    writeFileSync(
+      join(project, 'vite-magic.config.ts'),
+      "export default { srcDir: 'source', exports: { formats: ['es'], outDir: 'build' } }\n",
+    );
+    writeFileSync(
+      join(workspace, 'vite-magic.config.ts'),
+      "export default { exports: { outDir: 'workspace-dist' } }\n",
+    );
+
+    const config = await resolved(workspace, viteMagic());
+
+    expect(libraryEntry(config)).toEqual({ index: join(workspace, 'source/index.ts') });
+    expect(config.build.outDir).toBe(join(workspace, 'workspace-dist'));
+
+    if (!config.build.lib) {
+      throw new Error('Expected library options');
+    }
+
+    expect(config.build.lib.formats).toEqual(['es']);
+  });
+
+  it('keeps the workspace as Vite root when no shared config exists', async () => {
+    const project = fixture();
+    const workspace = join(project, 'packages/ui');
+
+    mkdirSync(join(workspace, 'src'), { recursive: true });
+    writeFileSync(join(workspace, 'src/index.ts'), 'export const value = 1\n');
+    writeFileSync(join(project, 'package.json'), '{"private":true,"workspaces":["packages/*"]}\n');
+    writeFileSync(join(workspace, 'package.json'), '{"name":"@fixture/ui"}\n');
+
+    const config = await resolved(workspace, viteMagic());
+
+    expect(libraryEntry(config)).toEqual({ index: join(workspace, 'src/index.ts') });
+  });
+
   it('rejects a manually configured library entry', async () => {
     const project = fixture();
 

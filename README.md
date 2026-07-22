@@ -103,6 +103,33 @@ Vite does not emit declarations itself. A declaration plugin can read
 `magicConfig.exports?.typesOutDir` from the same config instead of repeating the
 path value.
 
+### Custom export conditions
+
+Add package export conditions without repeating the generated output paths. A
+condition can reference the generated `types`, `import`, or `require` target,
+contain nested conditions, or use a package-relative template:
+
+```ts
+export default defineConfig({
+  exports: {
+    formats: ['es', 'cjs'],
+    conditions: {
+      browser: 'import',
+      node: {
+        import: 'import',
+        require: 'require',
+      },
+      development: './dist/[name].development.js',
+      default: 'import',
+    },
+  },
+})
+```
+
+`[name]` expands to each generated entry key. Explicit templates must remain
+inside the package and must be emitted by your build separately. Conditions are
+written in resolution order, with `default` always last.
+
 ### Manual Vite integration
 
 If a plugin is not desired, import the same config from `vite.config.ts` and
@@ -235,6 +262,50 @@ if `package.json` exports are stale, before Vite even starts.
 | `--dry-run` | Preview changes without writing |
 | `--prune` | Explicitly remove exports not generated from source |
 | `--strict` | Make `validate` reject additional custom exports |
+
+## Monorepos and workspaces
+
+Running the CLI at a monorepo root processes every package declared through
+`package.json#workspaces` (npm/Yarn) or `pnpm-workspace.yaml`. The root
+`vite-magic.config.ts` provides shared defaults, while a config inside a
+workspace overrides only that package:
+
+```text
+monorepo/
+├── vite-magic.config.ts
+├── pnpm-workspace.yaml
+└── packages/
+    ├── core/
+    │   ├── package.json
+    │   └── src/
+    └── react/
+        ├── package.json
+        ├── vite-magic.config.ts
+        └── src/
+```
+
+```ts
+// monorepo/vite-magic.config.ts
+export default defineConfig({
+  srcDir: 'src',
+  exports: {
+    formats: ['es', 'cjs'],
+    outDir: 'dist',
+    conditions: { browser: 'import' },
+  },
+})
+```
+
+```ts
+// monorepo/packages/react/vite-magic.config.ts
+export default defineConfig({
+  exports: { outDir: 'build' },
+})
+```
+
+`viteMagic()` also discovers the root config when Vite runs from an individual
+workspace, then merges any workspace-local overrides. CLI flags remain the
+highest-priority values for every processed package.
 
 ## How entries are resolved
 

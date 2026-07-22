@@ -89,5 +89,8 @@
     "lib",
     "entry",
     "build"
-  ]
+  ],
+  "dependencies": {
+    "yaml": "^2.9.0"
+  }
 }

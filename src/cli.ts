@@ -1,8 +1,8 @@
-import { realpathSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, resolveConfig } from './config.js';
-import { generateEntries } from './generateEntries.js';
+import { loadConfig, mergeConfig, resolveConfig, type ViteMagicConfig } from './config.js';
+import { type GenerateEntriesOptions, generateEntries } from './generateEntries.js';
 import {
   diffExports,
   type ExportFormat,
@@ -13,6 +13,9 @@ import {
   readPackageJson,
   writePackageJson,
 } from './syncExports.js';
+import { findWorkspacePackages } from './workspaces.js';
+
+type Command = 'generate' | 'validate';
 
 type ParsedArguments = {
   command?: string;
@@ -45,6 +48,8 @@ function printUsage(): void {
   console.log('  --strict             Treat additional exports as validation errors');
   console.log('  -h, --help           Show help');
   console.log('  -v, --version        Show version');
+  console.log('');
+  console.log('Workspaces in package.json or pnpm-workspace.yaml are processed automatically.');
 }
 
 function optionValue(argv: string[], index: number, option: string): [string, number] {
@@ -155,6 +160,117 @@ function packageVersion(): string {
   }
 }
 
+type ProjectRunOptions = {
+  command: Command;
+  rootDir: string;
+  srcDir: string;
+  generateOptions: GenerateEntriesOptions;
+  exportsOptions: Omit<ExportsOptions, 'sourceRoot'>;
+  dryRun: boolean;
+  prune: boolean;
+  strict: boolean;
+};
+
+function runProject(options: ProjectRunOptions): number {
+  const { command, rootDir, srcDir, generateOptions, exportsOptions, dryRun, prune, strict } =
+    options;
+  const entries = generateEntries(rootDir, srcDir, generateOptions);
+  const expected = entryRecordToExports(entries, {
+    ...exportsOptions,
+    sourceRoot: resolve(rootDir, srcDir),
+  });
+  const pkg = readPackageJson(rootDir);
+
+  if (command === 'generate') {
+    const nextExports = mergeExports(pkg.exports, expected, { prune });
+
+    if (exportsAreSynced(pkg.exports, nextExports)) {
+      console.log('✓ package.json exports are already in sync');
+
+      return 0;
+    }
+
+    const difference = diffExports(pkg.exports, expected);
+
+    if (dryRun) {
+      console.log('Package exports would be updated:');
+    } else {
+      pkg.exports = nextExports;
+      writePackageJson(rootDir, pkg);
+      console.log('✓ package.json exports updated:');
+    }
+
+    for (const key of [...difference.missing, ...difference.changed]) {
+      console.log(`  ${key}`);
+    }
+
+    if (prune) {
+      for (const key of difference.extra) {
+        console.log(`  removed ${key}`);
+      }
+    }
+
+    return 0;
+  }
+
+  const isSynced = exportsAreSynced(pkg.exports, expected, {
+    allowExtra: !strict,
+  });
+
+  if (isSynced) {
+    console.log('✓ package.json exports are in sync');
+
+    return 0;
+  }
+
+  const { missing, extra, changed } = diffExports(pkg.exports, expected);
+
+  console.error('✗ package.json exports are out of sync with src entries');
+
+  if (missing.length) {
+    console.error(`  Missing : ${missing.join(', ')}`);
+  }
+
+  if (strict && extra.length) {
+    console.error(`  Extra   : ${extra.join(', ')}`);
+  }
+
+  if (changed.length) {
+    console.error(`  Changed : ${changed.join(', ')}`);
+  }
+
+  console.error('');
+  console.error('Run: npx vite-magic-tree-shaking generate');
+
+  return 1;
+}
+
+function projectRunOptions(
+  command: Command,
+  resolvedConfig: ReturnType<typeof resolveConfig>,
+  args: ParsedArguments,
+): ProjectRunOptions {
+  const srcDir = args.srcDir ?? resolvedConfig.srcDir;
+  const exportsOptions = {
+    ...resolvedConfig.options.exports,
+    ...args.exportsOptions,
+  };
+
+  return {
+    command,
+    rootDir: resolvedConfig.rootDir,
+    srcDir,
+    generateOptions: {
+      ...resolvedConfig.options,
+      exports: exportsOptions,
+    },
+    exportsOptions,
+    dryRun: args.dryRun,
+    prune: args.prune,
+    strict: args.strict,
+  };
+}
+
 export async function runCli(argv: string[]): Promise<number> {
   try {
     const args = parseArguments(argv);
@@ -183,88 +299,51 @@ export async function runCli(argv: string[]): Promise<number> {
       throw new Error('--strict is only valid with validate');
     }
 
+    const { command } = args;
     const searchRoot = args.rootDir ?? process.cwd();
     const loadedConfig = await loadConfig(searchRoot, args.configFile);
     const configDir = loadedConfig ? dirname(loadedConfig.path) : searchRoot;
-    const resolvedConfig = resolveConfig(loadedConfig?.config ?? {}, configDir);
-    const rootDir = args.rootDir ?? resolvedConfig.rootDir;
-    const srcDir = args.srcDir ?? resolvedConfig.srcDir;
-    const exportsOptions = {
-      ...resolvedConfig.options.exports,
-      ...args.exportsOptions,
-    };
-    const entries = generateEntries(rootDir, srcDir, {
-      ...resolvedConfig.options,
-      exports: exportsOptions,
-    });
-    const expected = entryRecordToExports(entries, {
-      ...exportsOptions,
-      sourceRoot: resolve(rootDir, srcDir),
-    });
-    const pkg = readPackageJson(rootDir);
+    const rootConfig = loadedConfig?.config ?? {};
+    const resolvedRootConfig = resolveConfig(rootConfig, configDir);
+    const monorepoRoot = args.rootDir ?? resolvedRootConfig.rootDir;
+    const workspaces = existsSync(resolve(monorepoRoot, 'package.json'))
+      ? findWorkspacePackages(monorepoRoot)
+      : [];
 
-    if (args.command === 'generate') {
-      const nextExports = mergeExports(pkg.exports, expected, { prune: args.prune });
+    if (workspaces.length === 0) {
+      return runProject(
+        projectRunOptions(command, { ...resolvedRootConfig, rootDir: monorepoRoot }, args),
+      );
+    }
 
-      if (exportsAreSynced(pkg.exports, nextExports)) {
-        console.log('✓ package.json exports are already in sync');
+    const workspaceDefaults: ViteMagicConfig = { ...rootConfig };
 
-        return 0;
-      }
+    delete workspaceDefaults.rootDir;
 
-      const difference = diffExports(pkg.exports, expected);
+    let exitCode = 0;
 
-      if (args.dryRun) {
-        console.log('Package exports would be updated:');
-      } else {
-        pkg.exports = nextExports;
-        writePackageJson(rootDir, pkg);
-        console.log('✓ package.json exports updated:');
-      }
+    for (const workspace of workspaces) {
+      console.log(`\n${workspace.name} (${workspace.relativePath})`);
 
-      for (const key of [...difference.missing, ...difference.changed]) {
-        console.log(`  ${key}`);
-      }
+      try {
+        const localConfig = await loadConfig(workspace.rootDir);
+        const mergedConfig = mergeConfig(workspaceDefaults, localConfig?.config ?? {});
+        const localConfigDir = localConfig ? dirname(localConfig.path) : workspace.rootDir;
+        const resolvedWorkspaceConfig = resolveConfig(mergedConfig, localConfigDir);
+        const result = runProject(projectRunOptions(command, resolvedWorkspaceConfig, args));
 
-      if (args.prune) {
-        for (const key of difference.extra) {
-          console.log(`  removed ${key}`);
+        if (result !== 0) {
+          exitCode = 1;
         }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+
+        console.error(`✗ vite-magic (${workspace.name}): ${message}`);
+        exitCode = 1;
       }
-
-      return 0;
     }
 
-    const isSynced = exportsAreSynced(pkg.exports, expected, {
-      allowExtra: !args.strict,
-    });
-
-    if (isSynced) {
-      console.log('✓ package.json exports are in sync');
-
-      return 0;
-    }
-
-    const { missing, extra, changed } = diffExports(pkg.exports, expected);
-
-    console.error('✗ package.json exports are out of sync with src entries');
-
-    if (missing.length) {
-      console.error(`  Missing : ${missing.join(', ')}`);
-    }
-
-    if (args.strict && extra.length) {
-      console.error(`  Extra   : ${extra.join(', ')}`);
-    }
-
-    if (changed.length) {
-      console.error(`  Changed : ${changed.join(', ')}`);
-    }
-
-    console.error('');
-    console.error('Run: npx vite-magic-tree-shaking generate');
-
-    return 1;
+    return exitCode;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 

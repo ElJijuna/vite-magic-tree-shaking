@@ -2,7 +2,13 @@ import { existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSy
 import { basename, dirname, extname, isAbsolute, posix, relative, resolve } from 'node:path';
 import type { EntryRecord } from './generateEntries.js';
 
-export type ExportConditions = {
+export interface ExportTargetConditions {
+  [condition: string]: ExportTarget;
+}
+
+export type ExportTarget = string | ExportTargetConditions;
+
+export type ExportConditions = ExportTargetConditions & {
   types?: string;
   import?: string;
   require?: string;
@@ -11,6 +17,15 @@ export type ExportConditions = {
 export type ExportsMap = Record<string, ExportConditions>;
 
 export type ExportFormat = 'es' | 'cjs';
+
+export type ExportConditionReference = 'types' | 'import' | 'require';
+
+export type ExportConditionTemplate =
+  | ExportConditionReference
+  | `./${string}`
+  | { readonly [condition: string]: ExportConditionTemplate };
+
+export type CustomExportConditions = Readonly<Record<string, ExportConditionTemplate>>;
 
 export type ExportsOptions = {
   /** Absolute source directory used to map declaration output paths. */
@@ -27,6 +42,8 @@ export type ExportsOptions = {
   importExtension?: string;
   /** CommonJS file extension. @default '.cjs' */
   requireExtension?: string;
+  /** Additional package export conditions. `[name]` expands to the generated entry key. */
+  conditions?: CustomExportConditions;
 };
 
 export type ResolvedExportsOptions = {
@@ -37,6 +54,7 @@ export type ResolvedExportsOptions = {
   includeTypes: boolean;
   importExtension: string;
   requireExtension: string;
+  conditions: CustomExportConditions;
 };
 
 export type ExportsComparisonOptions = {
@@ -98,7 +116,67 @@ export function resolveExportsOptions(options: ExportsOptions = {}): ResolvedExp
     includeTypes: options.includeTypes !== false,
     importExtension: validateExtension(options.importExtension ?? '.js', 'importExtension'),
     requireExtension: validateExtension(options.requireExtension ?? '.cjs', 'requireExtension'),
+    conditions: options.conditions ?? {},
   };
+}
+
+function validateConditionName(condition: string): void {
+  if (
+    !condition ||
+    condition.startsWith('.') ||
+    condition.includes(',') ||
+    /^\d+$/.test(condition)
+  ) {
+    throw new Error(`Invalid export condition: ${condition}`);
+  }
+}
+
+function validateConditionTarget(target: string): string {
+  const normalised = target.replace(/\\/g, '/');
+
+  if (
+    !normalised.startsWith('./') ||
+    normalised.includes('\0') ||
+    normalised.split('/').some((segment) => segment === '..')
+  ) {
+    throw new Error(`Export condition target must stay inside the package: ${target}`);
+  }
+
+  return normalised;
+}
+
+function resolveConditionTarget(
+  template: ExportConditionTemplate,
+  entryName: string,
+  references: Partial<Record<ExportConditionReference, string>>,
+): ExportTarget {
+  if (typeof template === 'string') {
+    if (template === 'types' || template === 'import' || template === 'require') {
+      const target = references[template];
+
+      if (!target) {
+        throw new Error(`Export condition references disabled target: ${template}`);
+      }
+
+      return target;
+    }
+
+    return validateConditionTarget(template.replaceAll('[name]', entryName));
+  }
+
+  const result: ExportTargetConditions = {};
+  const entries = Object.entries(template);
+  const orderedEntries = [
+    ...entries.filter(([condition]) => condition !== 'default'),
+    ...entries.filter(([condition]) => condition === 'default'),
+  ];
+
+  for (const [condition, nested] of orderedEntries) {
+    validateConditionName(condition);
+    result[condition] = resolveConditionTarget(nested, entryName, references);
+  }
+
+  return result;
 }
 
 function packageTarget(...parts: string[]): string {
@@ -157,22 +235,57 @@ export function entryRecordToExports(
     validateEntryKey(key);
     const exportKey = key === 'index' ? '.' : `./${key}`;
     const conditions: ExportConditions = {};
+    const references: Partial<Record<ExportConditionReference, string>> = {};
 
     if (resolvedOptions.includeTypes) {
-      conditions.types = declarationPath(key, entries[key], resolvedOptions);
+      references.types = declarationPath(key, entries[key], resolvedOptions);
     }
 
     if (formats.has('es')) {
-      conditions.import = packageTarget(
+      references.import = packageTarget(
         resolvedOptions.outDir,
         `${key}${resolvedOptions.importExtension}`,
       );
     }
 
     if (formats.has('cjs')) {
-      conditions.require = packageTarget(
+      references.require = packageTarget(
         resolvedOptions.outDir,
         `${key}${resolvedOptions.requireExtension}`,
+      );
+    }
+
+    if (references.types) {
+      conditions.types = references.types;
+    }
+
+    for (const [condition, template] of Object.entries(resolvedOptions.conditions)) {
+      validateConditionName(condition);
+
+      if (condition === 'types' || condition === 'import' || condition === 'require') {
+        throw new Error(`Custom export condition conflicts with built-in condition: ${condition}`);
+      }
+
+      if (condition === 'default') {
+        continue;
+      }
+
+      conditions[condition] = resolveConditionTarget(template, key, references);
+    }
+
+    if (references.import) {
+      conditions.import = references.import;
+    }
+
+    if (references.require) {
+      conditions.require = references.require;
+    }
+
+    if (Object.hasOwn(resolvedOptions.conditions, 'default')) {
+      conditions.default = resolveConditionTarget(
+        resolvedOptions.conditions.default,
+        key,
+        references,
       );
     }
 

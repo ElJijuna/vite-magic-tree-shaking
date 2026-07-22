@@ -150,4 +150,60 @@ describe('runCli', () => {
 
     await expect(runCli(['generate', '--config', 'config/magic.ts', project])).resolves.toBe(0);
   });
+
+  it('generates every workspace with shared and package-local config', async () => {
+    root = mkdtempSync(join(tmpdir(), 'vite-cli-monorepo-'));
+    const packages = ['alpha', 'beta'];
+
+    writeFileSync(
+      join(root, 'package.json'),
+      `${JSON.stringify({ private: true, workspaces: ['packages/*'] })}\n`,
+    );
+    writeFileSync(
+      join(root, 'vite-magic.config.ts'),
+      `export default {
+  srcDir: 'source',
+  exports: {
+    formats: ['es'],
+    includeTypes: false,
+    conditions: { browser: 'import' },
+  },
+}\n`,
+    );
+
+    for (const name of packages) {
+      const workspace = join(root, 'packages', name);
+
+      mkdirSync(join(workspace, 'source'), { recursive: true });
+      writeFileSync(join(workspace, 'source/index.ts'), '');
+      writeFileSync(
+        join(workspace, 'package.json'),
+        `${JSON.stringify({ name: `@fixture/${name}` })}\n`,
+      );
+    }
+
+    writeFileSync(
+      join(root, 'packages/beta/vite-magic.config.ts'),
+      "export default { exports: { outDir: 'build' } }\n",
+    );
+
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    await expect(runCli(['generate', root])).resolves.toBe(0);
+    await expect(runCli(['validate', root])).resolves.toBe(0);
+
+    const alpha = JSON.parse(readFileSync(join(root, 'packages/alpha/package.json'), 'utf-8')) as {
+      exports: unknown;
+    };
+    const beta = JSON.parse(readFileSync(join(root, 'packages/beta/package.json'), 'utf-8')) as {
+      exports: unknown;
+    };
+
+    expect(alpha.exports).toEqual({
+      '.': { browser: './dist/index.js', import: './dist/index.js' },
+    });
+    expect(beta.exports).toEqual({
+      '.': { browser: './build/index.js', import: './build/index.js' },
+    });
+  });
 });

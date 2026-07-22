@@ -1,8 +1,9 @@
 import { dirname, resolve } from 'node:path';
 import type { LibraryOptions, Plugin, UserConfig } from 'vite';
-import { loadConfig, resolveConfig, type ViteMagicConfig } from './config.js';
+import { loadConfig, mergeConfig, resolveConfig, type ViteMagicConfig } from './config.js';
 import { generateEntries } from './generateEntries.js';
 import { resolveExportsOptions } from './syncExports.js';
+import { findWorkspaceRoot } from './workspaces.js';
 
 export interface ViteMagicPluginOptions extends ViteMagicConfig {
   /** Custom config path, relative to the Vite root. Set to `false` to disable discovery. */
@@ -23,9 +24,24 @@ async function pluginConfig(
     exports: inlineExports,
     ...inlineOptions
   } = inlineConfig;
-  const loaded = configFile === false ? null : await loadConfig(viteRoot, configFile);
-  const configDir = loaded ? dirname(loaded.path) : viteRoot;
-  const fromFile = resolveConfig(loaded?.config ?? {}, configDir);
+  const localConfig = configFile === false ? null : await loadConfig(viteRoot, configFile);
+  const workspaceRoot = configFile === undefined ? findWorkspaceRoot(viteRoot) : null;
+  const sharedConfig = workspaceRoot ? await loadConfig(workspaceRoot) : null;
+  const configDir = localConfig
+    ? dirname(localConfig.path)
+    : sharedConfig
+      ? dirname(sharedConfig.path)
+      : viteRoot;
+  const inherited = { ...(sharedConfig?.config ?? {}) };
+
+  if (sharedConfig) {
+    delete inherited.rootDir;
+  }
+
+  const loadedConfig = mergeConfig(inherited, localConfig?.config ?? {});
+  const packageConfig =
+    !localConfig && sharedConfig ? { ...loadedConfig, rootDir: viteRoot } : loadedConfig;
+  const fromFile = resolveConfig(packageConfig, configDir);
 
   return {
     rootDir: inlineRootDir === undefined ? fromFile.rootDir : resolve(viteRoot, inlineRootDir),

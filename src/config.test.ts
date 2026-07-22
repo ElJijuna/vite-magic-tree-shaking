@@ -2,7 +2,13 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { defineConfig, generateEntriesFromConfig, loadConfig, resolveConfig } from './config.js';
+import {
+  defineConfig,
+  generateEntriesFromConfig,
+  loadConfig,
+  mergeConfig,
+  resolveConfig,
+} from './config.js';
 
 let root: string | undefined;
 
@@ -35,6 +41,18 @@ describe('magic config', () => {
     const config = { srcDir: 'lib', exports: { formats: ['es'] as const } };
 
     expect(defineConfig(config)).toBe(config);
+  });
+
+  it('merges shared and local export options', () => {
+    expect(
+      mergeConfig(
+        { srcDir: 'source', exports: { formats: ['es'], outDir: 'dist' } },
+        { exports: { outDir: 'build', includeTypes: false } },
+      ),
+    ).toEqual({
+      srcDir: 'source',
+      exports: { formats: ['es'], outDir: 'build', includeTypes: false },
+    });
   });
 
   it('generates entries using shared config options', () => {
@@ -74,6 +92,19 @@ describe('magic config', () => {
     const project = fixture();
 
     await expect(loadConfig(project)).resolves.toBeNull();
+  });
+
+  it('can inherit the closest config from a parent directory', async () => {
+    const project = fixture();
+    const workspace = join(project, 'packages/ui');
+
+    mkdirSync(workspace, { recursive: true });
+    writeFileSync(join(project, 'vite-magic.config.ts'), "export default { srcDir: 'source' }\n");
+
+    const loaded = await loadConfig(workspace, undefined, { searchParents: true });
+
+    expect(loaded?.path).toBe(join(project, 'vite-magic.config.ts'));
+    expect(loaded?.config.srcDir).toBe('source');
   });
 
   it('rejects a missing explicit config file', async () => {

@@ -24,9 +24,25 @@ export interface ResolvedViteMagicConfig {
   options: GenerateEntriesOptions;
 }
 
+export interface LoadConfigOptions {
+  /** Search parent directories when the default config is not present locally. */
+  searchParents?: boolean;
+}
+
 /** Provides type checking and autocomplete for `vite-magic.config.ts`. */
 export function defineConfig(config: ViteMagicConfig): ViteMagicConfig {
   return config;
+}
+
+/** Merges shared and package-local config while preserving nested export options. */
+export function mergeConfig(base: ViteMagicConfig, override: ViteMagicConfig): ViteMagicConfig {
+  const merged = { ...base, ...override };
+
+  if (base.exports || override.exports) {
+    merged.exports = { ...base.exports, ...override.exports };
+  }
+
+  return merged;
 }
 
 /** Resolves config paths relative to the directory containing the config file. */
@@ -57,8 +73,24 @@ export function generateEntriesFromConfig(
 export async function loadConfig(
   searchRoot: string = process.cwd(),
   configFile?: string,
+  options: LoadConfigOptions = {},
 ): Promise<LoadedViteMagicConfig | null> {
-  const path = resolve(searchRoot, configFile ?? DEFAULT_CONFIG_FILE);
+  let path = resolve(searchRoot, configFile ?? DEFAULT_CONFIG_FILE);
+
+  if (!configFile && options.searchParents) {
+    let directory = resolve(searchRoot);
+
+    while (!existsSync(path)) {
+      const parent = dirname(directory);
+
+      if (parent === directory) {
+        break;
+      }
+
+      directory = parent;
+      path = resolve(directory, DEFAULT_CONFIG_FILE);
+    }
+  }
 
   if (!existsSync(path)) {
     if (configFile) {

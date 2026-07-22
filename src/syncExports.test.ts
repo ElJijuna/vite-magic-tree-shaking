@@ -39,6 +39,7 @@ describe('entryRecordToExports', () => {
       includeTypes: true,
       importExtension: '.js',
       requireExtension: '.cjs',
+      conditions: {},
     });
   });
 
@@ -112,6 +113,61 @@ describe('entryRecordToExports', () => {
         require: './build/js/index.js',
       },
     });
+  });
+
+  it('supports custom, nested, and templated export conditions', () => {
+    expect(
+      entryRecordToExports(
+        { index: 'src/index.ts' },
+        {
+          conditions: {
+            browser: 'import',
+            node: { import: 'import', require: 'require' },
+            development: './development/[name].js',
+            default: 'import',
+          },
+        },
+      ),
+    ).toEqual({
+      '.': {
+        types: './dist/index.d.ts',
+        browser: './dist/index.js',
+        node: {
+          import: './dist/index.js',
+          require: './dist/index.cjs',
+        },
+        development: './development/index.js',
+        import: './dist/index.js',
+        require: './dist/index.cjs',
+        default: './dist/index.js',
+      },
+    });
+    expect(
+      Object.keys(
+        entryRecordToExports(
+          { index: 'src/index.ts' },
+          { conditions: { default: 'import', browser: 'import' } },
+        )['.'],
+      ),
+    ).toEqual(['types', 'browser', 'import', 'require', 'default']);
+  });
+
+  it('rejects unsafe or unavailable custom conditions', () => {
+    expect(() =>
+      entryRecordToExports(
+        { index: 'src/index.ts' },
+        { formats: ['es'], conditions: { node: 'require' } },
+      ),
+    ).toThrow('references disabled target: require');
+    expect(() =>
+      entryRecordToExports(
+        { index: 'src/index.ts' },
+        { conditions: { development: './../outside/[name].js' } },
+      ),
+    ).toThrow('must stay inside the package');
+    expect(() =>
+      entryRecordToExports({ index: 'src/index.ts' }, { conditions: { default: '' as './' } }),
+    ).toThrow('must stay inside the package');
   });
 
   it('rejects output paths outside the package', () => {
