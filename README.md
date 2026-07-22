@@ -67,7 +67,44 @@ export default defineConfig({
 The CLI discovers this file automatically. Command-line options override its
 values, and an alternative file can be selected with `--config <path>`.
 
-Import the same config from `vite.config.ts` to generate the library entry map:
+### Automatic Vite plugin
+
+Add `viteMagic()` to `vite.config.ts`. It discovers the shared config and fills
+`build.lib.entry` automatically:
+
+```ts
+import { defineConfig } from 'vite'
+import { viteMagic } from 'vite-magic-tree-shaking'
+
+export default defineConfig({
+  plugins: [viteMagic()],
+  build: {
+    rollupOptions: {
+      external: ['react', 'react-dom'],
+    },
+  },
+})
+```
+
+The plugin also copies `exports.formats` into Vite's library formats. Additional
+library options can be provided without declaring `entry`:
+
+```ts
+viteMagic({
+  library: {
+    fileName: (format, entryName) =>
+      `${entryName}.${format === 'es' ? 'js' : 'cjs'}`,
+  },
+})
+```
+
+Remove any manual `build.lib.entry` when using the plugin. Inline options passed
+to `viteMagic()` override values from `vite-magic.config.ts`.
+
+### Manual Vite integration
+
+If a plugin is not desired, import the same config from `vite.config.ts` and
+generate the entry map directly:
 
 ```ts
 import { fileURLToPath } from 'node:url'

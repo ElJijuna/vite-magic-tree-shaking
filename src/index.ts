@@ -12,6 +12,8 @@ export {
 } from './config.js';
 export type { EntryRecord, GenerateEntriesOptions } from './generateEntries.js';
 export { generateEntries } from './generateEntries.js';
+export type { ViteMagicPluginOptions } from './plugin.js';
+export { viteMagic } from './plugin.js';
 export type {
   ExportConditions,
   ExportFormat,
